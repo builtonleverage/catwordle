@@ -45,6 +45,11 @@ function doGet(e) {
       return jsonOut_({ ok: true, keys: keys });
     }
 
+    if (p.action === 'listValues') {
+      var results = listValues_(p.prefix || '', shared);
+      return jsonOut_({ ok: true, results: results });
+    }
+
     return jsonOut_({ ok: false, error: 'unknown action' });
   } catch (err) {
     return jsonOut_({ ok: false, error: String(err) });
@@ -121,6 +126,21 @@ function listKeys_(prefix, shared) {
     if (s === shared && k.indexOf(prefix) === 0) keys.push(k);
   }
   return keys;
+}
+
+// Returns matching {key, value} pairs in one sheet scan, so callers like the
+// leaderboard don't need a separate get-per-key round trip for each result.
+function listValues_(prefix, shared) {
+  var data = getSheet_().getDataRange().getValues();
+  var results = [];
+  for (var i = 1; i < data.length; i++) {
+    var k = String(data[i][0]);
+    var s = !!data[i][2];
+    if (s === shared && k.indexOf(prefix) === 0) {
+      results.push({ key: k, value: data[i][1] });
+    }
+  }
+  return results;
 }
 
 function getDeviceSheet_() {
