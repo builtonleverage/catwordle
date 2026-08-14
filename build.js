@@ -21,7 +21,7 @@ function loadDotEnv(file) {
 
 loadDotEnv(path.join(__dirname, '.env'));
 
-const REQUIRED = ['CATWORDLE_API_URL', 'CATWORDLE_API_TOKEN'];
+const REQUIRED = ['CATWORDLE_SUPABASE_URL', 'CATWORDLE_SUPABASE_ANON_KEY'];
 const missing = REQUIRED.filter(k => !process.env[k]);
 if (missing.length) {
   console.error('Missing required env vars: ' + missing.join(', '));
@@ -34,8 +34,8 @@ const outDir = path.join(__dirname, 'dist');
 const outPath = path.join(outDir, 'index.html');
 
 let html = fs.readFileSync(templatePath, 'utf8');
-html = html.split('__CATWORDLE_API_URL__').join(process.env.CATWORDLE_API_URL);
-html = html.split('__CATWORDLE_API_TOKEN__').join(process.env.CATWORDLE_API_TOKEN);
+html = html.split('__CATWORDLE_SUPABASE_URL__').join(process.env.CATWORDLE_SUPABASE_URL);
+html = html.split('__CATWORDLE_SUPABASE_ANON_KEY__').join(process.env.CATWORDLE_SUPABASE_ANON_KEY);
 
 if (html.includes('__CATWORDLE_')) {
   console.error('Unreplaced placeholder remains in output — check src/index.template.html');
