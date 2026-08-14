@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Catwordle — One Clue, One Word, Twice a Day</title>
+<meta name="description" content="A category-clued 5-letter word puzzle, twice a day. Get one hint word, guess the word in 6 tries, and compare results with friends.">
+<meta property="og:title" content="Catwordle — One Clue, One Word, Twice a Day">
+<meta property="og:description" content="A category-clued 5-letter word puzzle, twice a day. Get one hint word, guess the word in 6 tries, and compare results with friends.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://catwordle.online/">
+<style>
+  :root{
+    --bg:#000000;
+    --panel:#1C1C1E;
+    --panel-2:#2C2C2E;
+    --line: rgba(255,255,255,0.09);
+    --text:#F5F5F7;
+    --muted:#8E8E93;
+    --blue:#0A84FF;
+    --green:#30D158;
+    --yellow:#FFD60A;
+    --absent:#3A3A3C;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    padding:28px 16px 60px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{width:100%; max-width:420px;}
+
+  header{display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:22px;}
+  .logo{font-size:26px; font-weight:700; letter-spacing:-0.02em; margin:0;}
+  .logo .accent{color:var(--blue);}
+  .tagline{color:var(--muted); font-size:13px; margin-top:3px; letter-spacing:-0.01em;}
+  .icon-btn{
+    width:32px; height:32px; border-radius:50%;
+    background:var(--panel); border:1px solid var(--line);
+    color:var(--text); font-size:14px; font-weight:600;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; flex-shrink:0;
+  }
+  .icon-btn:active{background:var(--panel-2);}
+
+  /* Category card */
+  .card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:16px;
+    padding:16px 18px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:14px;
+  }
+  .eyebrow{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px;}
+  .category{font-size:18px; font-weight:600; letter-spacing:-0.01em;}
+  .pill{
+    display:flex; align-items:center; gap:6px;
+    background:var(--panel-2); border-radius:100px;
+    padding:6px 12px; font-size:12px; color:var(--muted); font-weight:500;
+    flex-shrink:0;
+  }
+
+  /* Reveal banner */
+  .reveal{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:11px 14px;
+    font-size:13px;
+    color:var(--muted);
+    margin-bottom:14px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:10px;
+  }
+  .reveal b{color:var(--green); font-weight:600;}
+  .reveal button{background:none; border:none; color:var(--muted); font-size:15px; cursor:pointer; padding:0 2px;}
+
+  /* Name setup */
+  .name-setup{display:flex; gap:8px; margin-bottom:14px;}
+  .name-setup input{
+    flex:1; background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:11px 13px; color:var(--text); font-family:inherit; font-size:14px;
+  }
+  .name-setup input::placeholder{color:var(--muted);}
+  .name-setup button, .primary-btn{
+    background:var(--blue); color:#fff; border:none; border-radius:10px;
+    padding:11px 18px; font-weight:600; font-size:14px; cursor:pointer; font-family:inherit;
+  }
+  .name-setup button:active, .primary-btn:active{filter:brightness(0.9);}
+  .player-chip{text-align:center; font-size:12px; color:var(--muted); margin-bottom:14px;}
+  .player-chip b{color:var(--text); font-weight:600;}
+  .player-chip button{background:none; border:none; color:var(--blue); cursor:pointer; font-size:12px; padding:0; font-family:inherit;}
+
+  #toast{text-align:center; min-height:16px; font-size:12.5px; color:var(--muted); margin-bottom:10px;}
+  #toast.err{color:#FF453A;}
+
+  /* Grid */
+  #grid{display:grid; grid-template-rows:repeat(6,1fr); gap:6px; margin:0 auto 16px; max-width:300px;}
+  .row{display:grid; grid-template-columns:repeat(5,1fr); gap:6px;}
+  .tile{
+    aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+    font-weight:700; font-size:20px; letter-spacing:0;
+    border:1.5px solid var(--line); border-radius:8px;
+    text-transform:uppercase; background:var(--panel); color:var(--text);
+  }
+  .tile.filled{border-color:rgba(255,255,255,0.35);}
+  .tile.correct{background:var(--green); border-color:var(--green); color:#04210E;}
+  .tile.present{background:var(--yellow); border-color:var(--yellow); color:#3A2F00;}
+  .tile.absent{background:var(--absent); border-color:var(--absent); color:var(--muted);}
+  .row.shake{animation:shake 0.3s;}
+  @keyframes shake{
+    0%,100%{transform:translateX(0);}
+    25%{transform:translateX(-5px);}
+    75%{transform:translateX(5px);}
+  }
+  @media (prefers-reduced-motion: reduce){ .row.shake{animation:none;} }
+
+  /* Keyboard */
+  #keyboard{max-width:400px; margin:0 auto 22px;}
+  .krow{display:flex; justify-content:center; gap:5px; margin-bottom:6px;}
+  .key{
+    background:var(--panel-2); color:var(--text); border:none; border-radius:6px;
+    font-family:inherit; font-weight:600; font-size:12px;
+    padding:13px 0; min-width:28px; flex:1; max-width:36px;
+    cursor:pointer; text-transform:uppercase;
+  }
+  .key.wide{max-width:52px; font-size:11px;}
+  .key.correct{background:var(--green); color:#04210E;}
+  .key.present{background:var(--yellow); color:#3A2F00;}
+  .key.absent{background:#2C2C2E; color:var(--muted);}
+
+  /* End panel */
+  .end-panel{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px; text-align:center; margin-bottom:14px;}
+  .end-title{font-size:19px; font-weight:600; margin-bottom:4px;}
+  .end-sub{color:var(--muted); font-size:13px; margin-bottom:14px;}
+  .countdown{font-size:12.5px; color:var(--muted); margin-top:10px;}
+  .countdown b{color:var(--text); font-weight:600;}
+
+  /* Panels */
+  .panel-block{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:12px;}
+  .panel-title{font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:12px; font-weight:600;}
+  .stats-row{display:flex; justify-content:space-around; text-align:center;}
+  .stat-num{font-size:21px; font-weight:700; color:var(--text);}
+  .stat-label{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; margin-top:2px;}
+  .lb-row{display:flex; justify-content:space-between; font-size:13.5px; padding:7px 0; border-bottom:1px solid var(--line);}
+  .lb-row:last-child{border-bottom:none;}
+  .lb-empty{font-size:13px; color:var(--muted); text-align:center; padding:6px 0;}
+
+  /* How to play modal */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(0,0,0,0.6);
+    backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+    display:none; align-items:flex-end; justify-content:center; z-index:50;
+  }
+  .modal-backdrop.open{display:flex;}
+  .modal{
+    background:var(--panel); width:100%; max-width:420px;
+    border-radius:20px 20px 0 0; padding:22px 22px 32px;
+    max-height:82vh; overflow-y:auto;
+    border:1px solid var(--line); border-bottom:none;
+  }
+  @media (min-width:480px){
+    .modal-backdrop{align-items:center;}
+    .modal{border-radius:20px; border-bottom:1px solid var(--line); max-width:380px;}
+  }
+  .modal-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;}
+  .modal-title{font-size:19px; font-weight:700;}
+  .htp-step{display:flex; gap:12px; margin-bottom:16px;}
+  .htp-num{
+    width:22px; height:22px; border-radius:50%; background:var(--panel-2);
+    color:var(--text); font-size:12px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px;
+  }
+  .htp-text{font-size:13.5px; line-height:1.45; color:var(--text);}
+  .htp-text b{color:var(--text);}
+  .htp-example{display:flex; gap:4px; margin:14px 0 6px;}
+  .htp-tile{
+    width:34px; height:34px; border-radius:6px; display:flex; align-items:center; justify-content:center;
+    font-weight:700; font-size:15px; text-transform:uppercase;
+  }
+  .htp-legend{font-size:12px; color:var(--muted); line-height:1.6; margin-top:6px;}
+  .htp-legend span{display:inline-flex; align-items:center; gap:5px; margin-right:14px;}
+  .swatch{width:10px; height:10px; border-radius:3px; display:inline-block;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1 class="logo"><span class="accent">Cat</span>wordle</h1>
+      <div class="tagline">One clue, one word, twice a day.</div>
+    </div>
+    <button class="icon-btn" id="howToBtn" aria-label="How to play">?</button>
+  </header>
+
+  <div class="card">
+    <div>
+      <div class="eyebrow" id="dateLabel">—</div>
+      <div class="category" id="categoryLabel">Loading…</div>
+    </div>
+    <div class="pill"><span id="slotIcon">☀️</span><span id="slotLabel">AM</span></div>
+  </div>
+
+  <div id="revealBanner" class="reveal" style="display:none;">
+    <div id="revealText"></div>
+    <button id="revealClose">✕</button>
+  </div>
+
+  <div id="nameSetup" class="name-setup" style="display:none;">
+    <input id="nameInput" maxlength="16" placeholder="Your name">
+    <button id="nameSave">Save</button>
+  </div>
+  <div id="playerChip" class="player-chip" style="display:none;"></div>
+
+  <div id="toast">Any 5-letter guess works</div>
+  <div id="grid"></div>
+  <div id="keyboard"></div>
+
+  <div id="endPanel" class="end-panel" style="display:none;">
+    <div class="end-title" id="endTitle"></div>
+    <div class="end-sub" id="endSub"></div>
+    <button class="primary-btn" id="shareBtn">Share result</button>
+    <div class="countdown" id="countdown"></div>
+  </div>
+
+  <div class="panel-block">
+    <div class="panel-title">Your stats</div>
+    <div class="stats-row">
+      <div><div class="stat-num" id="statPlayed">0</div><div class="stat-label">Played</div></div>
+      <div><div class="stat-num" id="statWinPct">0%</div><div class="stat-label">Win rate</div></div>
+      <div><div class="stat-num" id="statStreak">0</div><div class="stat-label">Streak</div></div>
+      <div><div class="stat-num" id="statMax">0</div><div class="stat-label">Best</div></div>
+    </div>
+  </div>
+
+  <div class="panel-block">
+    <div class="panel-title">Who's played this round</div>
+    <div id="leaderboard"><div class="lb-empty">No one yet — be the first!</div></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="htpBackdrop">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">How to play</div>
+      <button class="icon-btn" id="htpClose" aria-label="Close">✕</button>
+    </div>
+
+    <div class="htp-step">
+      <div class="htp-num">1</div>
+      <div class="htp-text">Guess the <b>5-letter word</b> in 6 tries. Any 5 letters count — no dictionary needed.</div>
+    </div>
+    <div class="htp-step">
+      <div class="htp-num">2</div>
+      <div class="htp-text">Every round has a <b>category</b> — that's your clue to the word.</div>
+    </div>
+    <div class="htp-step">
+      <div class="htp-num">3</div>
+      <div class="htp-text">Tile colors show how close each guess is:</div>
+    </div>
+
+    <div class="htp-example">
+      <div class="htp-tile" style="background:var(--green); color:#04210E;">C</div>
+      <div class="htp-tile" style="background:var(--yellow); color:#3A2F00;">R</div>
+      <div class="htp-tile" style="background:var(--absent); color:var(--muted);">A</div>
+      <div class="htp-tile" style="background:var(--absent); color:var(--muted);">N</div>
+      <div class="htp-tile" style="background:var(--absent); color:var(--muted);">E</div>
+    </div>
+    <div class="htp-legend">
+      <span><span class="swatch" style="background:var(--green);"></span>Right letter, right spot</span>
+      <span><span class="swatch" style="background:var(--yellow);"></span>Right letter, wrong spot</span>
+      <span><span class="swatch" style="background:var(--absent);"></span>Not in the word</span>
+    </div>
+
+    <div class="htp-step" style="margin-top:16px;">
+      <div class="htp-num">4</div>
+      <div class="htp-text">A <b>new word drops every 12 hours</b> — one AM round, one PM round, same for everyone.</div>
+    </div>
+    <div class="htp-step">
+      <div class="htp-num">5</div>
+      <div class="htp-text">The <b>last answer reveals itself</b> automatically when a new round starts.</div>
+    </div>
+    <div class="htp-step">
+      <div class="htp-num">6</div>
+      <div class="htp-text">Add your name to join the <b>group board</b>, then hit <b>Share</b> to post your result.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- Config: Google Sheets backend ----------
+  // These placeholders are substituted at build time by build.js, which
+  // reads CATWORDLE_API_URL / CATWORDLE_API_TOKEN from the environment
+  // (local .env for dev, host platform env vars in production). Never
+  // hardcode real values in this template — it's committed to git.
+  const CONFIG = {
+    API_URL: '__CATWORDLE_API_URL__',
+    API_TOKEN: '__CATWORDLE_API_TOKEN__'
+  };
+
+  // ---------- Word bank ----------
+  const BANK = [
+    ["FRUITS","MANGO"],["FRUITS","GRAPE"],["FRUITS","LEMON"],["FRUITS","MELON"],
+    ["VEGETABLES","ONION"],["SPICES & HERBS","THYME"],["SPICES & HERBS","CUMIN"],["SPICES & HERBS","BASIL"],
+    ["DOG BREEDS","BOXER"],["BIRDS","EAGLE"],["BIRDS","ROBIN"],["OCEAN CREATURES","WHALE"],
+    ["OCEAN CREATURES","SHARK"],["COLORS","BEIGE"],["COLORS","IVORY"],["CARD & TABLE GAMES","POKER"],
+    ["CHESS PIECES","QUEEN"],["MUSICAL INSTRUMENTS","BANJO"],["BODY PARTS","ELBOW"],["EMOTIONS","HAPPY"],
+    ["EMOTIONS","ANGRY"],["WEATHER","STORM"],["WEATHER","CLOUD"],["GEMSTONES","TOPAZ"],
+    ["GEMSTONES","PEARL"],["DANCE STYLES","SALSA"],["DANCE STYLES","TANGO"],["BREADS","BAGEL"],
+    ["COFFEE DRINKS","MOCHA"],["COUNTRIES","INDIA"],["COUNTRIES","CHINA"],["COUNTRIES","JAPAN"],
+    ["COUNTRIES","GHANA"],["US STATES","TEXAS"],["US STATES","IDAHO"],["US STATES","MAINE"],
+    ["ZODIAC SIGNS","LIBRA"],["ZODIAC SIGNS","VIRGO"],["GREEK GODS","HADES"],["ELEMENTS","XENON"],
+    ["ELEMENTS","RADON"],["ELEMENTS","BORON"],["MUSIC GENRES","METAL"],["MUSIC GENRES","HOUSE"],
+    ["DESSERTS","CANDY"],["TOOLS","DRILL"],["PLANETS","VENUS"],["PLANETS","EARTH"],
+    ["SPORTS","RUGBY"],["KITCHEN ITEMS","WHISK"]
+  ];
+
+  function mulberry32(seed){
+    return function(){
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+      let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  const rng = mulberry32(20250101);
+  const perm = BANK.map((_, i) => i);
+  for(let i = perm.length - 1; i > 0; i--){
+    const j = Math.floor(rng() * (i + 1));
+    [perm[i], perm[j]] = [perm[j], perm[i]];
+  }
+
+  const EPOCH = Date.UTC(2025,0,1,0,0,0);
+  function slotIndexFor(ts){ return Math.floor((ts - EPOCH) / (12*3600*1000)); }
+  function puzzleFor(slotIdx){
+    const idx = perm[((slotIdx % perm.length) + perm.length) % perm.length];
+    return { category: BANK[idx][0], word: BANK[idx][1] };
+  }
+  function slotStart(slotIdx){ return new Date(EPOCH + slotIdx * 12*3600*1000); }
+
+  const now = Date.now();
+  const slotIndex = slotIndexFor(now);
+  const isAM = (((slotIndex % 2) + 2) % 2) === 0;
+  const puzzle = puzzleFor(slotIndex);
+  const prevPuzzle = puzzleFor(slotIndex - 1);
+  const nextBoundary = EPOCH + (slotIndex + 1) * 12*3600*1000;
+
+  // ---------- Device identity ----------
+  // The Sheet is one global table, so per-device data (name, stats,
+  // progress, dismissed-reveal state) must be namespaced per browser or
+  // every visitor reads/writes the same row. Shared data (leaderboard
+  // results) is intentionally NOT scoped — that's meant to be global.
+  function getDeviceId(){
+    try{
+      let id = localStorage.getItem('cw_device_id');
+      if(!id){
+        id = (crypto.randomUUID ? crypto.randomUUID() : 'dev-' + Math.random().toString(36).slice(2) + Date.now().toString(36));
+        localStorage.setItem('cw_device_id', id);
+      }
+      return id;
+    }catch(e){
+      return 'dev-nolocalstorage-' + Math.random().toString(36).slice(2);
+    }
+  }
+  const DEVICE_ID = getDeviceId();
+  function scoped(key){ return 'd:' + DEVICE_ID + ':' + key; }
+
+  // ---------- Passive device stats (no permission prompts) ----------
+  function collectDeviceInfo(){
+    let tz = '';
+    try{ tz = Intl.DateTimeFormat().resolvedOptions().timeZone; }catch(e){}
+    return {
+      device_id: DEVICE_ID,
+      user_agent: navigator.userAgent || '',
+      platform: navigator.platform || '',
+      language: navigator.language || '',
+      timezone: tz,
+      screen_w: screen.width || 0,
+      screen_h: screen.height || 0,
+      viewport_w: window.innerWidth || 0,
+      viewport_h: window.innerHeight || 0,
+      device_pixel_ratio: window.devicePixelRatio || 1,
+      color_scheme: (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light',
+      touch: ('ontouchstart' in window) || (navigator.maxTouchPoints > 0),
+      hw_concurrency: navigator.hardwareConcurrency || 0,
+      device_memory: navigator.deviceMemory || 0,
+      connection_type: (navigator.connection && navigator.connection.effectiveType) || '',
+      referrer: document.referrer || ''
+    };
+  }
+  async function logDevice(){
+    try{ await apiPost({ action:'logDevice', device: collectDeviceInfo() }); }
+    catch(e){ console.error('logDevice failed', e); }
+  }
+
+  // ---------- Storage helpers (Google Sheets via Apps Script Web App) ----------
+  // NOTE on CORS: GET requests use only query params, and POST requests are
+  // sent with Content-Type: text/plain — both stay "simple" requests so the
+  // browser never sends a CORS preflight (which Apps Script can't answer).
+  // Don't add custom headers (e.g. Authorization) or application/json POSTs
+  // without re-checking this.
+  async function apiGet(params){
+    const url = new URL(CONFIG.API_URL);
+    Object.keys(params).forEach(k => url.searchParams.set(k, params[k]));
+    url.searchParams.set('token', CONFIG.API_TOKEN);
+    const res = await fetch(url.toString(), { method: 'GET' });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || 'API error');
+    return data;
+  }
+  async function apiPost(body){
+    const res = await fetch(CONFIG.API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({}, body, { token: CONFIG.API_TOKEN }))
+    });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.error || 'API error');
+    return data;
+  }
+
+  async function sGet(key, shared){
+    try{
+      const data = await apiGet({ action:'get', key, shared: !!shared });
+      return data.value != null ? data.value : null;
+    }catch(e){ console.error('sGet failed', e); return null; }
+  }
+  async function sSet(key, value, shared){
+    try{
+      await apiPost({ action:'set', key, value, shared: !!shared });
+      return true;
+    }catch(e){ console.error('sSet failed', e); return null; }
+  }
+  async function sList(prefix, shared){
+    try{
+      const data = await apiGet({ action:'list', prefix, shared: !!shared });
+      return data.keys || [];
+    }catch(e){ console.error('sList failed', e); return []; }
+  }
+
+  // ---------- DOM refs ----------
+  const $ = id => document.getElementById(id);
+  const gridEl = $('grid'), keyboardEl = $('keyboard'), toastEl = $('toast');
+  const endPanel = $('endPanel'), endTitle = $('endTitle'), endSub = $('endSub'), countdownEl = $('countdown');
+
+  $('dateLabel').textContent = slotStart(slotIndex).toLocaleDateString(undefined,{month:'short', day:'numeric'}) + ' · ' + (isAM ? 'AM Round' : 'PM Round');
+  $('categoryLabel').textContent = puzzle.category;
+  $('slotIcon').textContent = isAM ? '☀️' : '🌙';
+  $('slotLabel').textContent = isAM ? 'AM' : 'PM';
+
+  // ---------- How to play modal ----------
+  const htpBackdrop = $('htpBackdrop');
+  function openHtp(){ htpBackdrop.classList.add('open'); }
+  function closeHtp(){ htpBackdrop.classList.remove('open'); }
+  $('howToBtn').addEventListener('click', openHtp);
+  $('htpClose').addEventListener('click', closeHtp);
+  htpBackdrop.addEventListener('click', (e) => { if(e.target === htpBackdrop) closeHtp(); });
+  window.addEventListener('keydown', (e) => { if(e.key === 'Escape') closeHtp(); });
+
+  // ---------- Game state ----------
+  let guesses = [];
+  let currentGuess = '';
+  let finished = false;
+  let won = false;
+  let playerName = null;
+  const keyStatus = {};
+
+  const ROWS = [
+    "QWERTYUIOP".split(''),
+    "ASDFGHJKL".split(''),
+    ["ENTER", ..."ZXCVBNM".split(''), "BACK"]
+  ];
+
+  function buildKeyboard(){
+    keyboardEl.innerHTML = '';
+    ROWS.forEach(row => {
+      const r = document.createElement('div');
+      r.className = 'krow';
+      row.forEach(k => {
+        const b = document.createElement('button');
+        b.className = 'key' + (k.length > 1 ? ' wide' : '');
+        b.textContent = k === 'BACK' ? '⌫' : k;
+        b.dataset.key = k;
+        b.addEventListener('click', () => handleKey(k));
+        r.appendChild(b);
+      });
+      keyboardEl.appendChild(r);
+    });
+  }
+
+  function buildGrid(){
+    gridEl.innerHTML = '';
+    for(let i = 0; i < 6; i++){
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.id = 'row-' + i;
+      for(let j = 0; j < 5; j++){
+        const tile = document.createElement('div');
+        tile.className = 'tile';
+        row.appendChild(tile);
+      }
+      gridEl.appendChild(row);
+    }
+  }
+
+  function evaluate(guess, answer){
+    const result = new Array(5).fill('absent');
+    const counts = {};
+    for(const ch of answer) counts[ch] = (counts[ch]||0) + 1;
+    for(let i = 0; i < 5; i++){
+      if(guess[i] === answer[i]){ result[i] = 'correct'; counts[guess[i]]--; }
+    }
+    for(let i = 0; i < 5; i++){
+      if(result[i] === 'correct') continue;
+      const ch = guess[i];
+      if(counts[ch] > 0){ result[i] = 'present'; counts[ch]--; }
+    }
+    return result;
+  }
+
+  function renderGrid(){
+    for(let i = 0; i < 6; i++){
+      const row = document.getElementById('row-' + i);
+      const tiles = row.children;
+      const g = guesses[i];
+      for(let j = 0; j < 5; j++){
+        const tile = tiles[j];
+        tile.className = 'tile';
+        tile.textContent = '';
+        if(g){
+          tile.textContent = g.word[j];
+          tile.classList.add(g.result[j]);
+        } else if(i === guesses.length && currentGuess[j]){
+          tile.textContent = currentGuess[j];
+          tile.classList.add('filled');
+        }
+      }
+    }
+  }
+
+  function renderKeyboard(){
+    document.querySelectorAll('.key').forEach(b => {
+      const k = b.dataset.key;
+      b.classList.remove('correct','present','absent');
+      if(keyStatus[k]) b.classList.add(keyStatus[k]);
+    });
+  }
+
+  function updateKeyStatus(guess, result){
+    for(let i = 0; i < 5; i++){
+      const ch = guess[i], st = result[i];
+      const rank = {absent:0, present:1, correct:2};
+      if(!keyStatus[ch] || rank[st] > rank[keyStatus[ch]]) keyStatus[ch] = st;
+    }
+  }
+
+  function showToast(msg, isError){
+    toastEl.textContent = msg;
+    toastEl.classList.toggle('err', !!isError);
+  }
+
+  function shakeCurrentRow(){
+    const row = document.getElementById('row-' + guesses.length);
+    row.classList.add('shake');
+    setTimeout(() => row.classList.remove('shake'), 300);
+  }
+
+  async function handleKey(k){
+    if(finished) return;
+    if(k === 'BACK'){
+      currentGuess = currentGuess.slice(0, -1);
+      renderGrid();
+      return;
+    }
+    if(k === 'ENTER'){
+      await submitGuess();
+      return;
+    }
+    if(currentGuess.length < 5 && /^[A-Z]$/.test(k)){
+      currentGuess += k;
+      renderGrid();
+    }
+  }
+
+  async function submitGuess(){
+    if(currentGuess.length !== 5){
+      showToast('Enter 5 letters', true);
+      shakeCurrentRow();
+      return;
+    }
+    const result = evaluate(currentGuess, puzzle.word);
+    guesses.push({ word: currentGuess, result });
+    updateKeyStatus(currentGuess, result);
+    const didWin = currentGuess === puzzle.word;
+    currentGuess = '';
+    renderGrid();
+    renderKeyboard();
+    await saveProgress();
+    if(didWin){
+      await finishGame(true);
+    } else if(guesses.length === 6){
+      await finishGame(false);
+    } else {
+      showToast(' ');
+    }
+  }
+
+  async function finishGame(didWin){
+    finished = true;
+    won = didWin;
+    endPanel.style.display = 'block';
+    endTitle.textContent = didWin ? 'Nice catch!' : 'So close!';
+    endSub.textContent = didWin
+      ? `Solved in ${guesses.length}/6 — ${puzzle.word}`
+      : `The word was ${puzzle.word}`;
+    startCountdown();
+    await saveProgress();
+    await updateStats(didWin);
+    await postResult(didWin);
+    await renderStats();
+    await renderLeaderboard();
+  }
+
+  function startCountdown(){
+    function tick(){
+      const diff = nextBoundary - Date.now();
+      if(diff <= 0){ countdownEl.innerHTML = 'Next round is up — refresh!'; return; }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      countdownEl.innerHTML = `Next round in <b>${h}h ${m}m ${s}s</b>`;
+    }
+    tick();
+    setInterval(tick, 1000);
+  }
+
+  // ---------- Persistence ----------
+  async function saveProgress(){
+    await sSet(scoped('progress-' + slotIndex), JSON.stringify({ guesses, finished, won }), false);
+  }
+  async function loadProgress(){
+    const raw = await sGet(scoped('progress-' + slotIndex), false);
+    if(raw){
+      try{
+        const data = JSON.parse(raw);
+        guesses = data.guesses || [];
+        finished = !!data.finished;
+        won = !!data.won;
+        guesses.forEach(g => updateKeyStatus(g.word, g.result));
+      }catch(e){}
+    }
+  }
+
+  async function updateStats(didWin){
+    let stats = { played:0, wins:0, streak:0, maxStreak:0, lastWonSlot:null };
+    const raw = await sGet(scoped('stats'), false);
+    if(raw){ try{ stats = JSON.parse(raw); }catch(e){} }
+    stats.played += 1;
+    if(didWin){
+      stats.wins += 1;
+      stats.streak = (stats.lastWonSlot === slotIndex - 1) ? stats.streak + 1 : 1;
+      stats.lastWonSlot = slotIndex;
+      stats.maxStreak = Math.max(stats.maxStreak || 0, stats.streak);
+    } else {
+      stats.streak = 0;
+    }
+    await sSet(scoped('stats'), JSON.stringify(stats), false);
+  }
+
+  async function renderStats(){
+    let stats = { played:0, wins:0, streak:0, maxStreak:0 };
+    const raw = await sGet(scoped('stats'), false);
+    if(raw){ try{ stats = JSON.parse(raw); }catch(e){} }
+    $('statPlayed').textContent = stats.played || 0;
+    $('statWinPct').textContent = stats.played ? Math.round(100*stats.wins/stats.played) + '%' : '0%';
+    $('statStreak').textContent = stats.streak || 0;
+    $('statMax').textContent = stats.maxStreak || 0;
+  }
+
+  async function postResult(didWin){
+    if(!playerName) return;
+    const key = `result-${slotIndex}-${playerName}`;
+    await sSet(key, JSON.stringify({ name: playerName, guesses: guesses.length, won: didWin, ts: Date.now() }), true);
+  }
+
+  async function renderLeaderboard(){
+    const keys = await sList(`result-${slotIndex}-`, true);
+    const board = $('leaderboard');
+    if(!keys || !keys.length){
+      board.innerHTML = '<div class="lb-empty">No one yet — be the first!</div>';
+      return;
+    }
+    const entries = [];
+    for(const k of keys){
+      const raw = await sGet(k, true);
+      if(raw){ try{ entries.push(JSON.parse(raw)); }catch(e){} }
+    }
+    entries.sort((a,b) => (b.won - a.won) || (a.guesses - b.guesses));
+    board.innerHTML = entries.map(e =>
+      `<div class="lb-row"><span>${escapeHtml(e.name)}</span><span>${e.won ? e.guesses + '/6' : '✕'}</span></div>`
+    ).join('');
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // ---------- Name setup ----------
+  function wirePlayerChip(){
+    const btn = document.getElementById('changeName');
+    if(btn){
+      btn.addEventListener('click', () => {
+        $('playerChip').style.display = 'none';
+        $('nameSetup').style.display = 'flex';
+      });
+    }
+  }
+  async function initName(){
+    playerName = await sGet(scoped('player-name'), false);
+    if(playerName){
+      $('playerChip').style.display = 'block';
+      $('playerChip').innerHTML = `Playing as <b>${escapeHtml(playerName)}</b> — <button id="changeName">change</button>`;
+      wirePlayerChip();
+    } else {
+      $('nameSetup').style.display = 'flex';
+    }
+  }
+  $('nameSave').addEventListener('click', async () => {
+    const val = $('nameInput').value.trim();
+    if(!val) return;
+    playerName = val.slice(0,16);
+    await sSet(scoped('player-name'), playerName, false);
+    $('nameSetup').style.display = 'none';
+    $('playerChip').style.display = 'block';
+    $('playerChip').innerHTML = `Playing as <b>${escapeHtml(playerName)}</b> — <button id="changeName">change</button>`;
+    wirePlayerChip();
+    if(finished) await postResult(won);
+    await renderLeaderboard();
+  });
+
+  // ---------- Auto reveal of last round ----------
+  async function initReveal(){
+    const dismissedKey = scoped('seen-reveal-' + slotIndex);
+    const dismissed = await sGet(dismissedKey, false);
+    if(dismissed) return;
+    const banner = $('revealBanner');
+    $('revealText').innerHTML = `Last round's answer was <b>${prevPuzzle.word}</b> <span style="color:var(--muted)">(${prevPuzzle.category})</span>`;
+    banner.style.display = 'flex';
+    $('revealClose').addEventListener('click', async () => {
+      banner.style.display = 'none';
+      await sSet(dismissedKey, '1', false);
+    });
+  }
+
+  // ---------- Share ----------
+  // Layered fallback: native share sheet (best on mobile, works in most
+  // in-app browsers) -> Clipboard API -> legacy execCommand copy -> raw
+  // text dump as last resort. Many chat apps' in-app browsers (WhatsApp,
+  // iMessage previews, etc.) block navigator.clipboard outright, which is
+  // exactly where this link gets opened, so don't rely on it alone.
+  function legacyCopy(text){
+    try{
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    }catch(e){ return false; }
+  }
+  $('shareBtn').addEventListener('click', async () => {
+    const emojiMap = { correct:'🟩', present:'🟨', absent:'⬛' };
+    const grid = guesses.map(g => g.result.map(r => emojiMap[r]).join('')).join('\n');
+    const label = slotStart(slotIndex).toLocaleDateString(undefined,{month:'short', day:'numeric'});
+    const text = `Catwordle ${label} ${isAM ? 'AM' : 'PM'} · ${won ? guesses.length + '/6' : 'X/6'}\nCategory: ${puzzle.category}\n${grid}`;
+
+    if(navigator.share){
+      try{ await navigator.share({ text }); return; }
+      catch(e){ if(e && e.name === 'AbortError') return; }
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      try{ await navigator.clipboard.writeText(text); showToast('Copied — paste it to your group chat!'); return; }
+      catch(e){}
+    }
+    if(legacyCopy(text)){ showToast('Copied — paste it to your group chat!'); return; }
+    showToast(text);
+  });
+
+  // ---------- Physical keyboard ----------
+  window.addEventListener('keydown', (e) => {
+    if(htpBackdrop.classList.contains('open')) return;
+    const tag = document.activeElement && document.activeElement.tagName;
+    if(tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if(e.key === 'Enter') handleKey('ENTER');
+    else if(e.key === 'Backspace') handleKey('BACK');
+    else if(/^[a-zA-Z]$/.test(e.key)) handleKey(e.key.toUpperCase());
+  });
+
+  // ---------- Boot ----------
+  async function boot(){
+    buildGrid();
+    buildKeyboard();
+    logDevice(); // fire-and-forget, doesn't block game load
+    await initName();
+    await initReveal();
+    await loadProgress();
+    renderGrid();
+    renderKeyboard();
+    await renderStats();
+    await renderLeaderboard();
+    if(finished){
+      endPanel.style.display = 'block';
+      endTitle.textContent = won ? 'Nice catch!' : 'So close!';
+      endSub.textContent = won ? `Solved in ${guesses.length}/6 — ${puzzle.word}` : `The word was ${puzzle.word}`;
+      startCountdown();
+    }
+  }
+  boot();
+})();
+</script>
+</body>
+</html>
