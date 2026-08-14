@@ -44,4 +44,17 @@ if (html.includes('__CATWORDLE_')) {
 
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(outPath, html);
+
+// Copy served assets (favicon, OG image, etc.) into dist/assets, skipping
+// design source files (*-source.html) that aren't meant to ship.
+const assetsSrc = path.join(__dirname, 'src', 'assets');
+const assetsOut = path.join(outDir, 'assets');
+if (fs.existsSync(assetsSrc)) {
+  fs.mkdirSync(assetsOut, { recursive: true });
+  for (const file of fs.readdirSync(assetsSrc)) {
+    if (file.endsWith('-source.html')) continue;
+    fs.copyFileSync(path.join(assetsSrc, file), path.join(assetsOut, file));
+  }
+}
+
 console.log('Built ' + outPath);
