@@ -371,8 +371,12 @@
   const now = Date.now();
   const slotIndex = slotIndexFor(now);
   const isAM = (((slotIndex % 2) + 2) % 2) === 0;
-  const puzzle = puzzleFor(slotIndex);
-  const prevPuzzle = puzzleFor(slotIndex - 1);
+  // Local BANK-derived puzzle is the default/fallback. It may be overridden
+  // by a row in the round_puzzles table (auto-generated content) — see
+  // resolvePuzzleOverrides() in boot(). Never changes after boot() finishes
+  // its early setup, so evaluate()/share/etc. always see a stable word.
+  let puzzle = puzzleFor(slotIndex);
+  let prevPuzzle = puzzleFor(slotIndex - 1);
   const nextBoundary = EPOCH + (slotIndex + 1) * 12*3600*1000;
 
   // ---------- Device identity ----------
@@ -464,9 +468,11 @@
   const endPanel = $('endPanel'), endTitle = $('endTitle'), endSub = $('endSub'), countdownEl = $('countdown');
 
   $('dateLabel').textContent = slotStart(slotIndex).toLocaleDateString(undefined,{month:'short', day:'numeric'}) + ' · ' + (isAM ? 'AM Round' : 'PM Round');
-  $('categoryLabel').textContent = puzzle.category;
   $('slotIcon').textContent = isAM ? '☀️' : '🌙';
   $('slotLabel').textContent = isAM ? 'AM' : 'PM';
+  // categoryLabel is set in boot(), after resolvePuzzleOverrides() — stays
+  // "Loading…" (from the HTML default) until then, so it never flashes the
+  // fallback category and then corrects itself if an override exists.
 
   // ---------- How to play modal ----------
   // Shareable via #how-to-play — e.g. https://catwordle.online/#how-to-play
@@ -869,8 +875,30 @@
     else if(/^[a-zA-Z]$/.test(e.key)) handleKey(e.key.toUpperCase());
   });
 
+  // ---------- Puzzle content override ----------
+  // round_puzzles holds auto-generated content that overrides the local
+  // BANK fallback for specific rounds. Only a scheduled job writes it
+  // (service_role key, never the client), so there's no race to handle -
+  // this is a plain read. If the table's empty or unreachable, puzzle/
+  // prevPuzzle just keep their BANK-derived defaults.
+  async function resolvePuzzleOverrides(){
+    try{
+      const rows = await sbSelect('round_puzzles', {
+        slot_index: `in.(${slotIndex},${slotIndex - 1})`,
+        select: 'slot_index,category,word'
+      });
+      for(const row of (rows || [])){
+        const override = { category: row.category, word: row.word };
+        if(row.slot_index === slotIndex) puzzle = override;
+        else if(row.slot_index === slotIndex - 1) prevPuzzle = override;
+      }
+    }catch(e){ console.error('resolvePuzzleOverrides failed', e); }
+  }
+
   // ---------- Boot ----------
   async function boot(){
+    await resolvePuzzleOverrides();
+    $('categoryLabel').textContent = puzzle.category;
     buildGrid();
     buildKeyboard();
     logDevice(); // fire-and-forget, doesn't block game load

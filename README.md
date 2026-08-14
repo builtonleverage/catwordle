@@ -11,16 +11,22 @@ Live at [catwordle.online](https://catwordle.online).
 Single static HTML file (`src/index.template.html`) — no framework, no
 bundler beyond the tiny build script described below.
 
-**Puzzle bank:** the word list and categories are a hardcoded array in the
-page's JS (`BANK`), deterministically shuffled with a seeded PRNG so every
-visitor sees the same puzzle at the same time, with no server round-trip
-needed to fetch it. This is *not* read from the database — it only ships
-with new code. If you want to edit words without redeploying, that'd mean a
-`puzzles` table and a query for the current slot; ask if you want that.
+**Puzzle bank:** the default word list and categories are a hardcoded array
+in the page's JS (`BANK`), deterministically shuffled with a seeded PRNG so
+every visitor sees the same puzzle at the same time. This is the permanent
+fallback and never changes. A `round_puzzles` table (see
+`supabase/002_round_puzzles.sql`) can *override* specific rounds with
+auto-generated content — on boot, the page checks for a row matching the
+current/previous `slot_index` and uses it if present, otherwise falls back
+to `BANK`. Only the `service_role` key can write `round_puzzles` (see
+below), so a scheduled generation job can keep adding fresh content
+indefinitely without the game ever depending on that job actually running —
+if it stops, the game keeps working off whatever's already accumulated.
 
-**Backend (Supabase/Postgres):** see `supabase/schema.sql` for the full
-schema. Four tables, queried directly from the browser via Supabase's
-auto-generated REST API (PostgREST) — no custom backend code:
+**Backend (Supabase/Postgres):** see `supabase/schema.sql` (core tables) and
+`supabase/002_round_puzzles.sql` (puzzle overrides) for the full schema.
+Tables are queried directly from the browser via Supabase's auto-generated
+REST API (PostgREST) — no custom backend code:
 - `devices` — per-browser name + running stats (played/wins/streak), keyed
   by a random `device_id` generated into `localStorage` on first visit.
 - `device_rounds` — per-device, per-round state: in-progress/finished
@@ -32,6 +38,10 @@ auto-generated REST API (PostgREST) — no custom backend code:
 - `device_log` — passive browser/device info (user agent, screen size,
   language, timezone, etc.) upserted on each visit — no permission
   prompts, just standard `navigator`/`screen` properties.
+- `round_puzzles` — auto-generated puzzle overrides, keyed by `slot_index`.
+  Publicly readable, but only writable with the `service_role` key (not the
+  public anon key) since it controls the actual game content shown to
+  every visitor — a scheduled job holds that key, the frontend never does.
 
 Access control is via Postgres Row Level Security policies (in
 `schema.sql`), not by hiding a secret — the Supabase anon key is meant to
@@ -71,9 +81,13 @@ their own Deploy Preview URL automatically.
 
 1. Create a project at [supabase.com](https://supabase.com).
 2. **SQL Editor → New query** → paste the contents of `supabase/schema.sql`
-   → Run. This creates all four tables and their RLS policies.
-3. **Project Settings → API** → copy the **Project URL** and the **`anon`
+   → Run. This creates the core four tables and their RLS policies.
+3. Repeat for `supabase/002_round_puzzles.sql` (and any later-numbered
+   migration files) — run each once, in order.
+4. **Project Settings → API** → copy the **Project URL** and the **`anon`
    `public`** key into `CATWORDLE_SUPABASE_URL` / `CATWORDLE_SUPABASE_ANON_KEY`.
-4. No further deploy step needed — PostgREST picks up schema changes
-   immediately. Future schema changes: write a new `.sql` migration, run it
-   in the SQL Editor.
+   The **`service_role`** key (same page) is only needed for the scheduled
+   puzzle-generation job — never put it in `.env` or anywhere client-side.
+5. No further deploy step needed — PostgREST picks up schema changes
+   immediately. Future schema changes: write a new numbered `.sql`
+   migration, run it in the SQL Editor.
