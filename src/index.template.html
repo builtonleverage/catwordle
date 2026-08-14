@@ -469,13 +469,26 @@
   $('slotLabel').textContent = isAM ? 'AM' : 'PM';
 
   // ---------- How to play modal ----------
+  // Shareable via #how-to-play — e.g. https://catwordle.online/#how-to-play
+  // opens straight to the modal, so it can be linked to someone who asks
+  // how to play instead of explaining it in chat.
   const htpBackdrop = $('htpBackdrop');
-  function openHtp(){ htpBackdrop.classList.add('open'); }
-  function closeHtp(){ htpBackdrop.classList.remove('open'); }
+  function openHtp(){
+    htpBackdrop.classList.add('open');
+    if(location.hash !== '#how-to-play') history.pushState(null, '', '#how-to-play');
+  }
+  function closeHtp(){
+    htpBackdrop.classList.remove('open');
+    if(location.hash === '#how-to-play') history.replaceState(null, '', location.pathname + location.search);
+  }
   $('howToBtn').addEventListener('click', openHtp);
   $('htpClose').addEventListener('click', closeHtp);
   htpBackdrop.addEventListener('click', (e) => { if(e.target === htpBackdrop) closeHtp(); });
   window.addEventListener('keydown', (e) => { if(e.key === 'Escape') closeHtp(); });
+  window.addEventListener('popstate', () => {
+    htpBackdrop.classList.toggle('open', location.hash === '#how-to-play');
+  });
+  if(location.hash === '#how-to-play') openHtp();
 
   // ---------- Game state ----------
   let guesses = [];
