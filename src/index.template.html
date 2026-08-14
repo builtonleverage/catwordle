@@ -302,14 +302,17 @@
 (function(){
   "use strict";
 
-  // ---------- Config: Google Sheets backend ----------
+  // ---------- Config: Supabase backend ----------
   // These placeholders are substituted at build time by build.js, which
-  // reads CATWORDLE_API_URL / CATWORDLE_API_TOKEN from the environment
-  // (local .env for dev, host platform env vars in production). Never
-  // hardcode real values in this template — it's committed to git.
+  // reads CATWORDLE_SUPABASE_URL / CATWORDLE_SUPABASE_ANON_KEY from the
+  // environment (local .env for dev, host platform env vars in
+  // production). The anon key is meant to be public — it's not a secret
+  // like the old Apps Script token was; access control lives in the
+  // Supabase Row Level Security policies (see supabase/schema.sql), not in
+  // hiding this key.
   const CONFIG = {
-    API_URL: '__CATWORDLE_API_URL__',
-    API_TOKEN: '__CATWORDLE_API_TOKEN__'
+    SUPABASE_URL: '__CATWORDLE_SUPABASE_URL__',
+    SUPABASE_ANON_KEY: '__CATWORDLE_SUPABASE_ANON_KEY__'
   };
 
   // ---------- Word bank ----------
@@ -360,10 +363,10 @@
   const nextBoundary = EPOCH + (slotIndex + 1) * 12*3600*1000;
 
   // ---------- Device identity ----------
-  // The Sheet is one global table, so per-device data (name, stats,
-  // progress, dismissed-reveal state) must be namespaced per browser or
-  // every visitor reads/writes the same row. Shared data (leaderboard
-  // results) is intentionally NOT scoped — that's meant to be global.
+  // Per-device data (name, stats, progress, dismissed-reveal state) is
+  // scoped by a random device_id column in real tables, generated once
+  // into localStorage on first visit. Shared data (leaderboard results) is
+  // intentionally not device-scoped — that's meant to be global.
   function getDeviceId(){
     try{
       let id = localStorage.getItem('cw_device_id');
@@ -377,7 +380,6 @@
     }
   }
   const DEVICE_ID = getDeviceId();
-  function scoped(key){ return 'd:' + DEVICE_ID + ':' + key; }
 
   // ---------- Passive device stats (no permission prompts) ----------
   function collectDeviceInfo(){
@@ -403,55 +405,44 @@
     };
   }
   async function logDevice(){
-    try{ await apiPost({ action:'logDevice', device: collectDeviceInfo() }); }
-    catch(e){ console.error('logDevice failed', e); }
+    try{
+      const info = collectDeviceInfo();
+      let visits = 1;
+      try{
+        const rows = await sbSelect('device_log', { device_id: `eq.${DEVICE_ID}`, select: 'visits' });
+        if(rows && rows[0]) visits = (rows[0].visits || 0) + 1;
+      }catch(e){}
+      await sbUpsert('device_log', Object.assign({}, info, { last_seen: new Date().toISOString(), visits }), 'device_id');
+    }catch(e){ console.error('logDevice failed', e); }
   }
 
-  // ---------- Storage helpers (Google Sheets via Apps Script Web App) ----------
-  // NOTE on CORS: GET requests use only query params, and POST requests are
-  // sent with Content-Type: text/plain — both stay "simple" requests so the
-  // browser never sends a CORS preflight (which Apps Script can't answer).
-  // Don't add custom headers (e.g. Authorization) or application/json POSTs
-  // without re-checking this.
-  async function apiGet(params){
-    const url = new URL(CONFIG.API_URL);
-    Object.keys(params).forEach(k => url.searchParams.set(k, params[k]));
-    url.searchParams.set('token', CONFIG.API_TOKEN);
-    const res = await fetch(url.toString(), { method: 'GET' });
-    if(!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    if(!data.ok) throw new Error(data.error || 'API error');
-    return data;
+  // ---------- Storage helpers (Supabase REST / PostgREST) ----------
+  const SB_HEADERS = {
+    apikey: CONFIG.SUPABASE_ANON_KEY,
+    Authorization: `Bearer ${CONFIG.SUPABASE_ANON_KEY}`,
+    'Content-Type': 'application/json'
+  };
+  async function sbSelect(table, params){
+    const url = new URL(`${CONFIG.SUPABASE_URL}/rest/v1/${table}`);
+    Object.keys(params || {}).forEach(k => url.searchParams.set(k, params[k]));
+    const res = await fetch(url.toString(), { headers: SB_HEADERS });
+    if(!res.ok) throw new Error('Supabase HTTP ' + res.status);
+    return res.json();
   }
-  async function apiPost(body){
-    const res = await fetch(CONFIG.API_URL, {
+  // Partial upsert: on conflict, only the columns present in `row` are
+  // updated (others keep their existing value); on insert, omitted columns
+  // take their table default. conflictCol is a comma-separated list of the
+  // table's conflict target, e.g. "device_id,slot_index".
+  async function sbUpsert(table, row, conflictCol){
+    const url = new URL(`${CONFIG.SUPABASE_URL}/rest/v1/${table}`);
+    url.searchParams.set('on_conflict', conflictCol);
+    const res = await fetch(url.toString(), {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(Object.assign({}, body, { token: CONFIG.API_TOKEN }))
+      headers: Object.assign({}, SB_HEADERS, { Prefer: 'resolution=merge-duplicates' }),
+      body: JSON.stringify(row)
     });
-    if(!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    if(!data.ok) throw new Error(data.error || 'API error');
-    return data;
-  }
-
-  async function sGet(key, shared){
-    try{
-      const data = await apiGet({ action:'get', key, shared: !!shared });
-      return data.value != null ? data.value : null;
-    }catch(e){ console.error('sGet failed', e); return null; }
-  }
-  async function sSet(key, value, shared){
-    try{
-      await apiPost({ action:'set', key, value, shared: !!shared });
-      return true;
-    }catch(e){ console.error('sSet failed', e); return null; }
-  }
-  async function sList(prefix, shared){
-    try{
-      const data = await apiGet({ action:'list', prefix, shared: !!shared });
-      return data.keys || [];
-    }catch(e){ console.error('sList failed', e); return []; }
+    if(!res.ok) throw new Error('Supabase HTTP ' + res.status);
+    return true;
   }
 
   // ---------- DOM refs ----------
@@ -652,77 +643,89 @@
 
   // ---------- Persistence ----------
   async function saveProgress(){
-    await sSet(scoped('progress-' + slotIndex), JSON.stringify({ guesses, finished, won }), false);
+    try{
+      await sbUpsert('device_rounds', {
+        device_id: DEVICE_ID, slot_index: slotIndex, guesses, finished, won,
+        updated_at: new Date().toISOString()
+      }, 'device_id,slot_index');
+    }catch(e){ console.error('saveProgress failed', e); }
   }
   async function loadProgress(){
-    const raw = await sGet(scoped('progress-' + slotIndex), false);
-    if(raw){
-      try{
-        const data = JSON.parse(raw);
+    try{
+      const rows = await sbSelect('device_rounds', {
+        device_id: `eq.${DEVICE_ID}`, slot_index: `eq.${slotIndex}`, select: 'guesses,finished,won'
+      });
+      const data = rows && rows[0];
+      if(data){
         guesses = data.guesses || [];
         finished = !!data.finished;
         won = !!data.won;
         guesses.forEach(g => updateKeyStatus(g.word, g.result));
-      }catch(e){}
-    }
+      }
+    }catch(e){ console.error('loadProgress failed', e); }
   }
 
   async function updateStats(didWin){
-    let stats = { played:0, wins:0, streak:0, maxStreak:0, lastWonSlot:null };
-    const raw = await sGet(scoped('stats'), false);
-    if(raw){ try{ stats = JSON.parse(raw); }catch(e){} }
-    stats.played += 1;
-    if(didWin){
-      stats.wins += 1;
-      stats.streak = (stats.lastWonSlot === slotIndex - 1) ? stats.streak + 1 : 1;
-      stats.lastWonSlot = slotIndex;
-      stats.maxStreak = Math.max(stats.maxStreak || 0, stats.streak);
-    } else {
-      stats.streak = 0;
-    }
-    await sSet(scoped('stats'), JSON.stringify(stats), false);
+    try{
+      const rows = await sbSelect('devices', {
+        device_id: `eq.${DEVICE_ID}`, select: 'stats_played,stats_wins,stats_streak,stats_max_streak,stats_last_won_slot'
+      });
+      const s = (rows && rows[0]) || {};
+      const played = (s.stats_played || 0) + 1;
+      let wins = s.stats_wins || 0, streak = s.stats_streak || 0, maxStreak = s.stats_max_streak || 0;
+      let lastWonSlot = s.stats_last_won_slot;
+      if(didWin){
+        wins += 1;
+        streak = (lastWonSlot === slotIndex - 1) ? streak + 1 : 1;
+        lastWonSlot = slotIndex;
+        maxStreak = Math.max(maxStreak, streak);
+      } else {
+        streak = 0;
+      }
+      await sbUpsert('devices', {
+        device_id: DEVICE_ID, stats_played: played, stats_wins: wins, stats_streak: streak,
+        stats_max_streak: maxStreak, stats_last_won_slot: lastWonSlot, updated_at: new Date().toISOString()
+      }, 'device_id');
+    }catch(e){ console.error('updateStats failed', e); }
   }
 
   async function renderStats(){
-    let stats = { played:0, wins:0, streak:0, maxStreak:0 };
-    const raw = await sGet(scoped('stats'), false);
-    if(raw){ try{ stats = JSON.parse(raw); }catch(e){} }
-    $('statPlayed').textContent = stats.played || 0;
-    $('statWinPct').textContent = stats.played ? Math.round(100*stats.wins/stats.played) + '%' : '0%';
-    $('statStreak').textContent = stats.streak || 0;
-    $('statMax').textContent = stats.maxStreak || 0;
+    let s = { stats_played:0, stats_wins:0, stats_streak:0, stats_max_streak:0 };
+    try{
+      const rows = await sbSelect('devices', {
+        device_id: `eq.${DEVICE_ID}`, select: 'stats_played,stats_wins,stats_streak,stats_max_streak'
+      });
+      if(rows && rows[0]) s = rows[0];
+    }catch(e){ console.error('renderStats failed', e); }
+    $('statPlayed').textContent = s.stats_played || 0;
+    $('statWinPct').textContent = s.stats_played ? Math.round(100*s.stats_wins/s.stats_played) + '%' : '0%';
+    $('statStreak').textContent = s.stats_streak || 0;
+    $('statMax').textContent = s.stats_max_streak || 0;
   }
 
   async function postResult(didWin){
     if(!playerName) return;
-    const key = `result-${slotIndex}-${playerName}`;
-    await sSet(key, JSON.stringify({ name: playerName, guesses: guesses.length, won: didWin, ts: Date.now() }), true);
+    try{
+      await sbUpsert('results', {
+        slot_index: slotIndex, name: playerName, guesses: guesses.length, won: didWin,
+        device_id: DEVICE_ID, ts: new Date().toISOString()
+      }, 'slot_index,name');
+    }catch(e){ console.error('postResult failed', e); }
   }
 
   async function renderLeaderboard(){
     const board = $('leaderboard');
-    const prefix = `result-${slotIndex}-`;
     let entries = [];
     try{
-      // Single batched round trip instead of one GET per player.
-      const data = await apiGet({ action:'listValues', prefix, shared:true });
-      entries = (data.results || [])
-        .map(r => { try{ return JSON.parse(r.value); }catch(e){ return null; } })
-        .filter(Boolean);
-    }catch(e){
-      // Backend may not have the listValues action yet (Apps Script not
-      // redeployed) — fall back to the slower one-call-per-key path.
-      const keys = await sList(prefix, true);
-      for(const k of keys){
-        const raw = await sGet(k, true);
-        if(raw){ try{ entries.push(JSON.parse(raw)); }catch(err){} }
-      }
-    }
-    if(!entries.length){
+      // One indexed, server-sorted query — no client-side sort needed.
+      entries = await sbSelect('results', {
+        slot_index: `eq.${slotIndex}`, select: 'name,guesses,won', order: 'won.desc,guesses.asc'
+      });
+    }catch(e){ console.error('renderLeaderboard failed', e); }
+    if(!entries || !entries.length){
       board.innerHTML = '<div class="lb-empty">No one yet — be the first!</div>';
       return;
     }
-    entries.sort((a,b) => (b.won - a.won) || (a.guesses - b.guesses));
     board.innerHTML = entries.map(e =>
       `<div class="lb-row"><span>${escapeHtml(e.name)}</span><span>${e.won ? e.guesses + '/6' : '✕'}</span></div>`
     ).join('');
@@ -743,7 +746,10 @@
     }
   }
   async function initName(){
-    playerName = await sGet(scoped('player-name'), false);
+    try{
+      const rows = await sbSelect('devices', { device_id: `eq.${DEVICE_ID}`, select: 'name' });
+      playerName = rows && rows[0] && rows[0].name;
+    }catch(e){ console.error('initName failed', e); playerName = null; }
     if(playerName){
       $('playerChip').style.display = 'block';
       $('playerChip').innerHTML = `Playing as <b>${escapeHtml(playerName)}</b> — <button id="changeName">change</button>`;
@@ -756,7 +762,8 @@
     const val = $('nameInput').value.trim();
     if(!val) return;
     playerName = val.slice(0,16);
-    await sSet(scoped('player-name'), playerName, false);
+    try{ await sbUpsert('devices', { device_id: DEVICE_ID, name: playerName, updated_at: new Date().toISOString() }, 'device_id'); }
+    catch(e){ console.error('save name failed', e); }
     $('nameSetup').style.display = 'none';
     $('playerChip').style.display = 'block';
     $('playerChip').innerHTML = `Playing as <b>${escapeHtml(playerName)}</b> — <button id="changeName">change</button>`;
@@ -767,15 +774,24 @@
 
   // ---------- Auto reveal of last round ----------
   async function initReveal(){
-    const dismissedKey = scoped('seen-reveal-' + slotIndex);
-    const dismissed = await sGet(dismissedKey, false);
+    let dismissed = false;
+    try{
+      const rows = await sbSelect('device_rounds', {
+        device_id: `eq.${DEVICE_ID}`, slot_index: `eq.${slotIndex}`, select: 'seen_reveal'
+      });
+      dismissed = !!(rows && rows[0] && rows[0].seen_reveal);
+    }catch(e){ console.error('initReveal check failed', e); }
     if(dismissed) return;
     const banner = $('revealBanner');
     $('revealText').innerHTML = `Last round's answer was <b>${prevPuzzle.word}</b> <span style="color:var(--muted)">(${prevPuzzle.category})</span>`;
     banner.style.display = 'flex';
     $('revealClose').addEventListener('click', async () => {
       banner.style.display = 'none';
-      await sSet(dismissedKey, '1', false);
+      try{
+        await sbUpsert('device_rounds', {
+          device_id: DEVICE_ID, slot_index: slotIndex, seen_reveal: true, updated_at: new Date().toISOString()
+        }, 'device_id,slot_index');
+      }catch(e){ console.error('dismiss reveal failed', e); }
     });
   }
 
