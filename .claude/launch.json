@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "catwordle-preview",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8936", "--directory", "/Users/pulkitmehta/claudecode/dist"],
+      "port": 8936
+    }
+  ]
+}
