@@ -5,10 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Catwordle — One Clue, One Word, Twice a Day</title>
 <meta name="description" content="A category-clued 5-letter word puzzle, twice a day. Get one hint word, guess the word in 6 tries, and compare results with friends.">
+<meta name="theme-color" content="#000000">
+
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+<link rel="icon" type="image/png" href="/assets/favicon.png">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+
 <meta property="og:title" content="Catwordle — One Clue, One Word, Twice a Day">
 <meta property="og:description" content="A category-clued 5-letter word puzzle, twice a day. Get one hint word, guess the word in 6 tries, and compare results with friends.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://catwordle.online/">
+<meta property="og:image" content="https://catwordle.online/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Catwordle — One Clue, One Word, Twice a Day">
+<meta name="twitter:description" content="A category-clued 5-letter word puzzle, twice a day. Get one hint word, guess the word in 6 tries, and compare results with friends.">
+<meta name="twitter:image" content="https://catwordle.online/assets/og-image.png">
 <style>
   :root{
     --bg:#000000;
@@ -456,13 +469,26 @@
   $('slotLabel').textContent = isAM ? 'AM' : 'PM';
 
   // ---------- How to play modal ----------
+  // Shareable via #how-to-play — e.g. https://catwordle.online/#how-to-play
+  // opens straight to the modal, so it can be linked to someone who asks
+  // how to play instead of explaining it in chat.
   const htpBackdrop = $('htpBackdrop');
-  function openHtp(){ htpBackdrop.classList.add('open'); }
-  function closeHtp(){ htpBackdrop.classList.remove('open'); }
+  function openHtp(){
+    htpBackdrop.classList.add('open');
+    if(location.hash !== '#how-to-play') history.pushState(null, '', '#how-to-play');
+  }
+  function closeHtp(){
+    htpBackdrop.classList.remove('open');
+    if(location.hash === '#how-to-play') history.replaceState(null, '', location.pathname + location.search);
+  }
   $('howToBtn').addEventListener('click', openHtp);
   $('htpClose').addEventListener('click', closeHtp);
   htpBackdrop.addEventListener('click', (e) => { if(e.target === htpBackdrop) closeHtp(); });
   window.addEventListener('keydown', (e) => { if(e.key === 'Escape') closeHtp(); });
+  window.addEventListener('popstate', () => {
+    htpBackdrop.classList.toggle('open', location.hash === '#how-to-play');
+  });
+  if(location.hash === '#how-to-play') openHtp();
 
   // ---------- Game state ----------
   let guesses = [];

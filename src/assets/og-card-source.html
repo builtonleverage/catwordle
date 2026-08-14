@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  html,body{margin:0;padding:0;}
+  .card{
+    width:1200px; height:630px;
+    background:
+      radial-gradient(ellipse 900px 500px at 30% 40%, rgba(10,132,255,0.14), transparent 60%),
+      #000000;
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    justify-content:center;
+    padding:0 100px;
+    font-family:-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    position:relative;
+    overflow:hidden;
+    box-sizing:border-box;
+  }
+  .mark{
+    width:108px; height:108px;
+    margin-bottom:40px;
+    filter: drop-shadow(0 0 46px rgba(10,132,255,0.55));
+  }
+  .wordmark{
+    font-size:96px;
+    font-weight:800;
+    letter-spacing:-0.03em;
+    color:#F5F5F7;
+    line-height:1;
+    margin:0 0 22px 0;
+  }
+  .wordmark .accent{ color:#0A84FF; }
+  .tagline{
+    font-size:30px;
+    color:#8E8E93;
+    letter-spacing:-0.005em;
+    font-weight:500;
+    margin:0;
+  }
+  .tiles{
+    position:absolute;
+    right:100px;
+    bottom:90px;
+    display:flex;
+    gap:10px;
+  }
+  .tile{
+    width:56px; height:56px;
+    border-radius:12px;
+  }
+  .line{
+    position:absolute;
+    top:0; left:0; right:0;
+    height:6px;
+    background:linear-gradient(90deg, #0A84FF, transparent 70%);
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="line"></div>
+    <svg class="mark" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+      <rect width="512" height="512" rx="118" fill="#0A84FF" fill-opacity="0.12"/>
+      <path fill="#0A84FF" d="
+        M 175 130 L 200 232 L 232 205 Z
+        M 337 130 L 280 205 L 312 232 Z
+        M 256 168
+        C 190 168 142 220 142 284
+        C 142 350 192 400 256 400
+        C 320 400 370 350 370 284
+        C 370 220 322 168 256 168
+        Z
+      "/>
+      <circle cx="216" cy="286" r="15" fill="#000000"/>
+      <circle cx="296" cy="286" r="15" fill="#000000"/>
+    </svg>
+    <div class="wordmark"><span class="accent">Cat</span>wordle</div>
+    <p class="tagline">One clue, one word, twice a day.</p>
+    <div class="tiles">
+      <div class="tile" style="background:#30D158;"></div>
+      <div class="tile" style="background:#FFD60A;"></div>
+      <div class="tile" style="background:#3A3A3C;"></div>
+      <div class="tile" style="background:#3A3A3C;"></div>
+      <div class="tile" style="background:#30D158;"></div>
+    </div>
+  </div>
+</body>
+</html>
