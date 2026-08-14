@@ -700,16 +700,27 @@
   }
 
   async function renderLeaderboard(){
-    const keys = await sList(`result-${slotIndex}-`, true);
     const board = $('leaderboard');
-    if(!keys || !keys.length){
+    const prefix = `result-${slotIndex}-`;
+    let entries = [];
+    try{
+      // Single batched round trip instead of one GET per player.
+      const data = await apiGet({ action:'listValues', prefix, shared:true });
+      entries = (data.results || [])
+        .map(r => { try{ return JSON.parse(r.value); }catch(e){ return null; } })
+        .filter(Boolean);
+    }catch(e){
+      // Backend may not have the listValues action yet (Apps Script not
+      // redeployed) — fall back to the slower one-call-per-key path.
+      const keys = await sList(prefix, true);
+      for(const k of keys){
+        const raw = await sGet(k, true);
+        if(raw){ try{ entries.push(JSON.parse(raw)); }catch(err){} }
+      }
+    }
+    if(!entries.length){
       board.innerHTML = '<div class="lb-empty">No one yet — be the first!</div>';
       return;
-    }
-    const entries = [];
-    for(const k of keys){
-      const raw = await sGet(k, true);
-      if(raw){ try{ entries.push(JSON.parse(raw)); }catch(e){} }
     }
     entries.sort((a,b) => (b.won - a.won) || (a.guesses - b.guesses));
     board.innerHTML = entries.map(e =>
