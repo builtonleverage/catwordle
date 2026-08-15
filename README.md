@@ -23,6 +23,15 @@ below), so a scheduled generation job can keep adding fresh content
 indefinitely without the game ever depending on that job actually running —
 if it stops, the game keeps working off whatever's already accumulated.
 
+**Guess validation:** guesses must be real words, checked against
+`src/assets/words.json` (the standard `tabatkins/wordle-list` reference
+list, ~14,855 words, fetched async on boot into a `Set`). The actual
+answer is always accepted regardless of dictionary membership — some
+`BANK` entries are proper nouns (country/state names) not in the list,
+so this safety net keeps every round winnable. If the word list hasn't
+finished loading yet, validation fails open (guess is allowed) rather
+than blocking play.
+
 **Backend (Supabase/Postgres):** see `supabase/schema.sql` (core tables) and
 `supabase/002_round_puzzles.sql` (puzzle overrides) for the full schema.
 Tables are queried directly from the browser via Supabase's auto-generated
