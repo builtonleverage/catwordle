@@ -109,3 +109,17 @@ their own Deploy Preview URL automatically.
 5. No further deploy step needed — PostgREST picks up schema changes
    immediately. Future schema changes: write a new numbered `.sql`
    migration, run it in the SQL Editor.
+
+## Privacy
+
+No accounts, no login. `device_log` passively records standard
+`navigator`/`screen` properties (user agent, screen size, language,
+timezone, etc.) on each visit — no permission prompts, since none of this
+requires one. It's used only for aggregate usage insight, is publicly
+readable via the anon key like the rest of the app's data (see `schema.sql`
+for exact RLS policies), and this is the whole extent of what's collected —
+read `src/index.template.html`'s `collectDeviceInfo()` for the literal list.
+
+## License
+
+[MIT](LICENSE)
