@@ -356,7 +356,7 @@
 
     <div class="htp-step">
       <div class="htp-num">🥇</div>
-      <div class="htp-text">Whoever solves in the <b>fewest guesses</b> wins the round. If two players tie on guesses, whoever <b>submitted first</b> ranks higher.</div>
+      <div class="htp-text">Whoever solves in the <b>fewest guesses</b> wins the round. If two players tie on guesses, whoever took <b>less time to solve</b> ranks higher — timed from your first guess to your winning guess, not from when the round started, so it doesn't matter when you open the app.</div>
     </div>
     <div class="htp-step">
       <div class="htp-num">🥈</div>
@@ -364,7 +364,7 @@
     </div>
     <div class="htp-step">
       <div class="htp-num">🥉</div>
-      <div class="htp-text">The <b>Time / Turns</b> toggle only changes what order the board is displayed in — Time shows who finished first chronologically, Turns shows fewest guesses first. Medals don't move.</div>
+      <div class="htp-text">The <b>Time / Turns</b> toggle only changes what order the board is displayed in — Time shows who finished first chronologically, Turns shows fewest guesses (then fastest solve time) first. Medals don't move.</div>
     </div>
     <div class="htp-step">
       <div class="htp-num">📱</div>
@@ -623,6 +623,8 @@
   let finished = false;
   let won = false;
   let playerName = null;
+  let firstGuessAt = null; // ms epoch; timestamp of the first submitted guess, drives the solve-time tiebreak
+  let solveMs = null; // computed once in finishGame() - postResult() must not recompute it from Date.now() on a later call (e.g. rename-after-finish), same reasoning as why ts is omitted there
   const keyStatus = {};
 
   const ROWS = [
@@ -752,6 +754,13 @@
     guesses.push({ word: currentGuess, result });
     updateKeyStatus(currentGuess, result);
     const didWin = currentGuess === puzzle.word;
+    // Solve-time tiebreak starts on the first guess, not round start -
+    // otherwise whoever opens the app earliest in the round gets an
+    // unfair tiebreak edge over someone who solves faster once they
+    // actually engage. Tell the player explicitly, since it now affects
+    // ranking.
+    const isFirstGuess = guesses.length === 1 && !firstGuessAt;
+    if(isFirstGuess) firstGuessAt = Date.now();
     currentGuess = '';
     renderGrid();
     renderKeyboard();
@@ -760,6 +769,8 @@
       await finishGame(true);
     } else if(guesses.length === 6){
       await finishGame(false);
+    } else if(isFirstGuess){
+      showToast('⏱ Timer started — your solve time now counts for tie-breaks');
     } else {
       showToast(' ');
     }
@@ -768,6 +779,7 @@
   async function finishGame(didWin){
     finished = true;
     won = didWin;
+    if(didWin && firstGuessAt) solveMs = Date.now() - firstGuessAt;
     endPanel.style.display = 'block';
     endTitle.textContent = didWin ? 'Nice catch!' : 'So close!';
     endSub.textContent = didWin
@@ -799,6 +811,7 @@
     try{
       await sbUpsert('device_rounds', {
         device_id: DEVICE_ID, slot_index: slotIndex, guesses, finished, won,
+        first_guess_at: firstGuessAt ? new Date(firstGuessAt).toISOString() : null,
         updated_at: new Date().toISOString()
       }, 'device_id,slot_index');
     }catch(e){ console.error('saveProgress failed', e); }
@@ -806,13 +819,14 @@
   async function loadProgress(){
     try{
       const rows = await sbSelect('device_rounds', {
-        device_id: `eq.${DEVICE_ID}`, slot_index: `eq.${slotIndex}`, select: 'guesses,finished,won'
+        device_id: `eq.${DEVICE_ID}`, slot_index: `eq.${slotIndex}`, select: 'guesses,finished,won,first_guess_at'
       });
       const data = rows && rows[0];
       if(data){
         guesses = data.guesses || [];
         finished = !!data.finished;
         won = !!data.won;
+        firstGuessAt = data.first_guess_at ? new Date(data.first_guess_at).getTime() : null;
         guesses.forEach(g => updateKeyStatus(g.word, g.result));
       }
     }catch(e){ console.error('loadProgress failed', e); }
@@ -863,11 +877,16 @@
       // first insert, and since it's not in this payload, a later upsert
       // (e.g. postResult gets called again if the player renames after
       // finishing) leaves the original finish time untouched instead of
-      // bumping it to the rename time.
-      await sbUpsert('results', {
-        slot_index: slotIndex, name: playerName, guesses: guesses.length, won: didWin,
-        device_id: DEVICE_ID
-      }, 'slot_index,name');
+      // bumping it to the rename time. solve_ms only ever lives in memory
+      // (set once in finishGame(), never persisted/restored on its own),
+      // so the same reasoning applies: only include it when we actually
+      // have a fresh value from finishGame() in *this* page load, or a
+      // reload-then-rename would send solve_ms:null and wipe the value
+      // already saved from the original finish.
+      await sbUpsert('results', Object.assign(
+        { slot_index: slotIndex, name: playerName, guesses: guesses.length, won: didWin, device_id: DEVICE_ID },
+        (solveMs != null) ? { solve_ms: solveMs } : {}
+      ), 'slot_index,name');
     }catch(e){ console.error('postResult failed', e); }
   }
 
@@ -928,7 +947,7 @@
   async function renderLeaderboard(){
     try{
       const [results, deviceNames] = await Promise.all([
-        sbSelect('results', { slot_index: `eq.${slotIndex}`, select: 'name,guesses,won,ts' }),
+        sbSelect('results', { slot_index: `eq.${slotIndex}`, select: 'name,guesses,won,ts,solve_ms' }),
         sbSelect('devices', { select: 'name', name: 'not.is.null' })
       ]);
       leaderboardEntries = results || [];
@@ -940,24 +959,35 @@
     renderLeaderboardRows();
   }
 
+  // Ties (equal guess count) break by solve duration, not absolute finish
+  // time - otherwise whoever opened the app earliest in the round wins
+  // the tiebreak regardless of how fast they actually solved it. Rows
+  // with no solve_ms (legacy data from before this existed) sort after
+  // ones that have it, falling back to ts among themselves.
+  function turnsTiebreak(a, b){
+    const aMs = a.solve_ms ?? Infinity, bMs = b.solve_ms ?? Infinity;
+    return (a.guesses - b.guesses) || (aMs - bMs) || (new Date(a.ts) - new Date(b.ts));
+  }
+  function formatDuration(ms){
+    const s = Math.round(ms / 1000);
+    const m = Math.floor(s / 60);
+    return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
+  }
+
   function renderLeaderboardRows(){
     const board = $('leaderboard');
     if(!leaderboardEntries || !leaderboardEntries.length){
       board.innerHTML = '<div class="lb-empty">No one yet — be the first!</div>';
       return;
     }
-    const byTurns = leaderboardEntries
-      .filter(e => e.won)
-      .sort((a,b) => (a.guesses - b.guesses) || (new Date(a.ts) - new Date(b.ts)));
+    const byTurns = leaderboardEntries.filter(e => e.won).sort(turnsTiebreak);
     const medalByName = {};
     ['gold','silver','bronze'].forEach((tier, i) => { if(byTurns[i]) medalByName[byTurns[i].name] = tier; });
 
     const sorted = [...leaderboardEntries].sort((a,b) => {
       if(a.won !== b.won) return b.won - a.won;
       if(!a.won) return new Date(a.ts) - new Date(b.ts);
-      if(leaderboardSort === 'turns'){
-        return (a.guesses - b.guesses) || (new Date(a.ts) - new Date(b.ts));
-      }
+      if(leaderboardSort === 'turns') return turnsTiebreak(a, b);
       return new Date(a.ts) - new Date(b.ts);
     });
     let winRank = 0;
@@ -971,8 +1001,13 @@
         return `<div class="lb-row"><span class="lb-left">${badge}<span class="lb-name">${escapeHtml(e.name)}</span>${deviceBadge}</span><span>✕</span></div>`;
       }
       winRank++;
-      const time = e.ts ? new Date(e.ts).toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'}) : '';
-      return `<div class="lb-row"><span class="lb-left">${badge}<span class="lb-name">#${winRank} ${escapeHtml(e.name)}</span>${deviceBadge}</span><span>${e.guesses}/6${time ? ' · ' + time : ''}</span></div>`;
+      // Turns mode is ranked by solve duration, so show that instead of
+      // absolute finish time - showing the old timestamp next to a
+      // duration-based rank would no longer match what's being ranked.
+      const detail = leaderboardSort === 'turns'
+        ? (e.solve_ms != null ? formatDuration(e.solve_ms) : (e.ts ? new Date(e.ts).toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'}) : ''))
+        : (e.ts ? new Date(e.ts).toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'}) : '');
+      return `<div class="lb-row"><span class="lb-left">${badge}<span class="lb-name">#${winRank} ${escapeHtml(e.name)}</span>${deviceBadge}</span><span>${e.guesses}/6${detail ? ' · ' + detail : ''}</span></div>`;
     }).join('');
   }
 
