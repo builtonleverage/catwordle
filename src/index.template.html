@@ -163,6 +163,14 @@
   /* Panels */
   .panel-block{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:12px;}
   .panel-title{font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:12px; font-weight:600;}
+  .panel-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;}
+  .panel-head .panel-title{margin-bottom:0;}
+  .sort-toggle{display:flex; background:var(--panel-2); border-radius:8px; padding:2px; gap:2px;}
+  .sort-toggle button{
+    background:none; border:none; color:var(--muted); font-family:inherit;
+    font-size:11px; font-weight:600; padding:5px 10px; border-radius:6px; cursor:pointer;
+  }
+  .sort-toggle button.active{background:var(--blue); color:#fff;}
   .stats-row{display:flex; justify-content:space-around; text-align:center;}
   .stat-num{font-size:21px; font-weight:700; color:var(--text);}
   .stat-label{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; margin-top:2px;}
@@ -258,7 +266,13 @@
   </div>
 
   <div class="panel-block">
-    <div class="panel-title">Who's played this round</div>
+    <div class="panel-head">
+      <div class="panel-title">Who's played this round</div>
+      <div class="sort-toggle" id="lbSortToggle">
+        <button type="button" data-sort="time" class="active">Time</button>
+        <button type="button" data-sort="turns">Turns</button>
+      </div>
+    </div>
     <div id="leaderboard"><div class="lb-empty">No one yet — be the first!</div></div>
   </div>
 </div>
@@ -738,30 +752,62 @@
   async function postResult(didWin){
     if(!playerName) return;
     try{
+      // ts is intentionally omitted here - the column defaults to now() on
+      // first insert, and since it's not in this payload, a later upsert
+      // (e.g. postResult gets called again if the player renames after
+      // finishing) leaves the original finish time untouched instead of
+      // bumping it to the rename time.
       await sbUpsert('results', {
         slot_index: slotIndex, name: playerName, guesses: guesses.length, won: didWin,
-        device_id: DEVICE_ID, ts: new Date().toISOString()
+        device_id: DEVICE_ID
       }, 'slot_index,name');
     }catch(e){ console.error('postResult failed', e); }
   }
 
+  // Fetched once per round load; re-sorted client-side on toggle so
+  // switching "Time"/"Turns" is instant and needs no extra round trip.
+  let leaderboardEntries = [];
+  let leaderboardSort = 'time'; // 'time' | 'turns' — time is the default
+
   async function renderLeaderboard(){
-    const board = $('leaderboard');
-    let entries = [];
     try{
-      // One indexed, server-sorted query — no client-side sort needed.
-      entries = await sbSelect('results', {
-        slot_index: `eq.${slotIndex}`, select: 'name,guesses,won', order: 'won.desc,guesses.asc'
+      leaderboardEntries = await sbSelect('results', {
+        slot_index: `eq.${slotIndex}`, select: 'name,guesses,won,ts'
       });
-    }catch(e){ console.error('renderLeaderboard failed', e); }
-    if(!entries || !entries.length){
+    }catch(e){ console.error('renderLeaderboard failed', e); leaderboardEntries = []; }
+    renderLeaderboardRows();
+  }
+
+  function renderLeaderboardRows(){
+    const board = $('leaderboard');
+    if(!leaderboardEntries || !leaderboardEntries.length){
       board.innerHTML = '<div class="lb-empty">No one yet — be the first!</div>';
       return;
     }
-    board.innerHTML = entries.map(e =>
-      `<div class="lb-row"><span>${escapeHtml(e.name)}</span><span>${e.won ? e.guesses + '/6' : '✕'}</span></div>`
-    ).join('');
+    const sorted = [...leaderboardEntries].sort((a,b) => {
+      if(a.won !== b.won) return b.won - a.won;
+      if(!a.won) return new Date(a.ts) - new Date(b.ts);
+      if(leaderboardSort === 'turns'){
+        return (a.guesses - b.guesses) || (new Date(a.ts) - new Date(b.ts));
+      }
+      return new Date(a.ts) - new Date(b.ts);
+    });
+    let winRank = 0;
+    board.innerHTML = sorted.map(e => {
+      if(!e.won) return `<div class="lb-row"><span>${escapeHtml(e.name)}</span><span>✕</span></div>`;
+      winRank++;
+      const time = e.ts ? new Date(e.ts).toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'}) : '';
+      return `<div class="lb-row"><span>#${winRank} ${escapeHtml(e.name)}</span><span>${e.guesses}/6${time ? ' · ' + time : ''}</span></div>`;
+    }).join('');
   }
+
+  $('lbSortToggle').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-sort]');
+    if(!btn || btn.classList.contains('active')) return;
+    leaderboardSort = btn.dataset.sort;
+    $('lbSortToggle').querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+    renderLeaderboardRows();
+  });
 
   function escapeHtml(s){
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
