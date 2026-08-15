@@ -364,6 +364,34 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="announceBackdrop">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">What's new 🎉</div>
+      <button class="icon-btn" id="announceClose" aria-label="Close">✕</button>
+    </div>
+
+    <div class="htp-step">
+      <div class="htp-num">🕐</div>
+      <div class="htp-text">The leaderboard now has a <b>Time / Turns</b> toggle — see who finished first, or who solved it in the fewest guesses.</div>
+    </div>
+    <div class="htp-step">
+      <div class="htp-num">🥇</div>
+      <div class="htp-text">Top 3 solvers each round get a <b>gold/silver/bronze cat medal</b>, always awarded by fewest guesses (ties broken by who submitted first).</div>
+    </div>
+    <div class="htp-step">
+      <div class="htp-num">📱</div>
+      <div class="htp-text">Playing under the same name from more than one device now shows a small <b>device-count icon</b> next to it.</div>
+    </div>
+    <div class="htp-step">
+      <div class="htp-num">ℹ️</div>
+      <div class="htp-text">Tap the <b>i</b> next to the leaderboard any time for the full ranking rules.</div>
+    </div>
+
+    <button class="primary-btn" id="announceGotIt" style="width:100%; margin-top:6px;">Got it</button>
+  </div>
+</div>
+
 <script>
 (function(){
   "use strict";
@@ -557,6 +585,28 @@
   $('rulesClose').addEventListener('click', closeRules);
   rulesBackdrop.addEventListener('click', (e) => { if(e.target === rulesBackdrop) closeRules(); });
   window.addEventListener('keydown', (e) => { if(e.key === 'Escape') closeRules(); });
+
+  // ---------- "What's new" announcement ----------
+  // Shown once per device, whether they're brand new or a returning
+  // player seeing this update for the first time. Bumping ANNOUNCE_KEY's
+  // suffix is how a future announcement gets shown again to everyone.
+  const ANNOUNCE_KEY = 'cw_seen_announce_v1';
+  const announceBackdrop = $('announceBackdrop');
+  function closeAnnounce(){
+    announceBackdrop.classList.remove('open');
+    try{ localStorage.setItem(ANNOUNCE_KEY, '1'); }catch(e){}
+  }
+  $('announceClose').addEventListener('click', closeAnnounce);
+  $('announceGotIt').addEventListener('click', closeAnnounce);
+  announceBackdrop.addEventListener('click', (e) => { if(e.target === announceBackdrop) closeAnnounce(); });
+  window.addEventListener('keydown', (e) => { if(e.key === 'Escape' && announceBackdrop.classList.contains('open')) closeAnnounce(); });
+  function maybeShowAnnounce(){
+    // Don't stack on top of a modal someone was deep-linked straight into.
+    if(location.hash === '#how-to-play') return;
+    let seen = false;
+    try{ seen = localStorage.getItem(ANNOUNCE_KEY) === '1'; }catch(e){}
+    if(!seen) announceBackdrop.classList.add('open');
+  }
 
   // ---------- Game state ----------
   let guesses = [];
@@ -1029,7 +1079,7 @@
 
   // ---------- Physical keyboard ----------
   window.addEventListener('keydown', (e) => {
-    if(htpBackdrop.classList.contains('open') || rulesBackdrop.classList.contains('open')) return;
+    if(htpBackdrop.classList.contains('open') || rulesBackdrop.classList.contains('open') || announceBackdrop.classList.contains('open')) return;
     const tag = document.activeElement && document.activeElement.tagName;
     if(tag === 'INPUT' || tag === 'TEXTAREA') return;
     if(e.key === 'Enter') handleKey('ENTER');
@@ -1077,6 +1127,7 @@
       endSub.textContent = won ? `Solved in ${guesses.length}/6 — ${puzzle.word}` : `The word was ${puzzle.word}`;
       startCountdown();
     }
+    maybeShowAnnounce();
   }
   boot();
 })();
