@@ -43,9 +43,14 @@ create table if not exists results (
   name text not null,
   guesses int not null,
   won boolean not null,
-  device_id text,
+  device_id text not null,
   ts timestamptz not null default now(),
-  primary key (slot_index, name)
+  -- Keyed by device, not name: a device can only ever hold one row per
+  -- round (renaming relabels it), which prevents one device from
+  -- reposting its single real result under unlimited aliases. Two
+  -- different devices sharing a name (allowed on purpose) still each
+  -- get their own row, since they have different device_ids.
+  primary key (slot_index, device_id)
 );
 
 -- Passive device/browser analytics, upserted on each visit.
