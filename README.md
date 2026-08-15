@@ -43,6 +43,12 @@ REST API (PostgREST) — no custom backend code:
   public anon key) since it controls the actual game content shown to
   every visitor — a scheduled job holds that key, the frontend never does.
 
+`medal_tally` (a view, not a table — see `supabase/004_medal_tally.sql`)
+computes all-time gold/silver/bronze medal counts per player live from
+`results`, using the same ranking rule as the per-round badges (fewest
+guesses, ties broken by earliest finish). No sync job or cache to keep
+up to date — it just reflects whatever's in `results` at query time.
+
 Access control is via Postgres Row Level Security policies (in
 `schema.sql`), not by hiding a secret — the Supabase anon key is meant to
 be public and is safe to ship in the built page.
