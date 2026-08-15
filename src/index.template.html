@@ -905,10 +905,16 @@
       // have a fresh value from finishGame() in *this* page load, or a
       // reload-then-rename would send solve_ms:null and wipe the value
       // already saved from the original finish.
+      //
+      // on_conflict is (slot_index, device_id), not name - a device can
+      // only ever hold one row per round, so renaming after finishing
+      // relabels that one row instead of creating a new one under the
+      // new name. Without this, one device could repost its single real
+      // result under unlimited aliases (see supabase/006_one_result_per_device.sql).
       await sbUpsert('results', Object.assign(
         { slot_index: slotIndex, name: playerName, guesses: guesses.length, won: didWin, device_id: DEVICE_ID },
         (solveMs != null) ? { solve_ms: solveMs } : {}
-      ), 'slot_index,name');
+      ), 'slot_index,device_id');
     }catch(e){ console.error('postResult failed', e); }
   }
 
