@@ -381,16 +381,20 @@
     </div>
 
     <div class="htp-step">
-      <div class="htp-num">🕐</div>
-      <div class="htp-text">The leaderboard now has a <b>Time / Turns</b> toggle — see who finished first, or who solved it in the fewest guesses.</div>
+      <div class="htp-num">🥇</div>
+      <div class="htp-text">Top 3 solvers each round get a <b>gold/silver/bronze cat medal</b> — fewest guesses wins, and ties now break by <b>how fast you solved it</b> (timed from your first guess), not by when you happened to open the app.</div>
     </div>
     <div class="htp-step">
-      <div class="htp-num">🥇</div>
-      <div class="htp-text">Top 3 solvers each round get a <b>gold/silver/bronze cat medal</b>, always awarded by fewest guesses (ties broken by who submitted first).</div>
+      <div class="htp-num">🕐</div>
+      <div class="htp-text">The leaderboard has a <b>Time / Turns</b> toggle — see who finished first chronologically, or who solved it in the fewest guesses (and fastest).</div>
+    </div>
+    <div class="htp-step">
+      <div class="htp-num">📖</div>
+      <div class="htp-text">Guesses must now be <b>real words</b> — checked against a standard word list before your guess is accepted.</div>
     </div>
     <div class="htp-step">
       <div class="htp-num">📱</div>
-      <div class="htp-text">Playing under the same name from more than one device now shows a small <b>device-count icon</b> next to it.</div>
+      <div class="htp-text">Playing under the same name from more than one device shows a small <b>device-count icon</b> next to it.</div>
     </div>
     <div class="htp-step">
       <div class="htp-num">ℹ️</div>
@@ -609,7 +613,7 @@
   // Shown once per device, whether they're brand new or a returning
   // player seeing this update for the first time. Bumping ANNOUNCE_KEY's
   // suffix is how a future announcement gets shown again to everyone.
-  const ANNOUNCE_KEY = 'cw_seen_announce_v1';
+  const ANNOUNCE_KEY = 'cw_seen_announce_v2';
   const announceBackdrop = $('announceBackdrop');
   function closeAnnounce(){
     announceBackdrop.classList.remove('open');
