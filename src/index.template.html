@@ -185,6 +185,10 @@
     color:var(--muted); font-size:10.5px; font-weight:600;
   }
   .lb-device-count svg{width:11px; height:11px; opacity:0.85;}
+  .tally-counts{display:flex; align-items:center; gap:10px; flex-shrink:0;}
+  .tally-count{display:flex; align-items:center; gap:3px; font-size:12.5px; font-weight:600; color:var(--muted);}
+  .tally-count svg{width:15px; height:15px;}
+  .tally-count.zero{opacity:0.35;}
   .lb-row:last-child{border-bottom:none;}
   .lb-empty{font-size:13px; color:var(--muted); text-align:center; padding:6px 0;}
 
@@ -287,6 +291,11 @@
       </div>
     </div>
     <div id="leaderboard"><div class="lb-empty">No one yet — be the first!</div></div>
+  </div>
+
+  <div class="panel-block">
+    <div class="panel-title">🏆 All-time medal leaders</div>
+    <div id="medalTally"><div class="lb-empty">No medals yet — play a round!</div></div>
   </div>
 </div>
 
@@ -967,6 +976,36 @@
     }).join('');
   }
 
+  // All-time medal counts across every round ever played - a Postgres
+  // view (medal_tally) does the ranking/aggregation server-side, so this
+  // is just a plain read and always reflects the latest results the
+  // moment a round finishes. No polling/refresh logic needed beyond the
+  // normal page-load fetch.
+  async function renderMedalTally(){
+    const board = $('medalTally');
+    let rows = [];
+    try{
+      rows = await sbSelect('medal_tally', {
+        select: 'name,gold,silver,bronze', order: 'gold.desc,silver.desc,bronze.desc', limit: '10'
+      });
+    }catch(e){ console.error('renderMedalTally failed', e); }
+    if(!rows || !rows.length){
+      board.innerHTML = '<div class="lb-empty">No medals yet — play a round!</div>';
+      return;
+    }
+    const tierIcon = tier => medalSvg(tier).replace('width="22" height="22"', 'width="15" height="15"');
+    board.innerHTML = rows.map(r => `
+      <div class="lb-row">
+        <span class="lb-name">${escapeHtml(r.name)}</span>
+        <span class="tally-counts">
+          <span class="tally-count${r.gold ? '' : ' zero'}">${tierIcon('gold')}${r.gold}</span>
+          <span class="tally-count${r.silver ? '' : ' zero'}">${tierIcon('silver')}${r.silver}</span>
+          <span class="tally-count${r.bronze ? '' : ' zero'}">${tierIcon('bronze')}${r.bronze}</span>
+        </span>
+      </div>
+    `).join('');
+  }
+
   $('lbSortToggle').addEventListener('click', (e) => {
     const btn = e.target.closest('button[data-sort]');
     if(!btn || btn.classList.contains('active')) return;
@@ -1120,7 +1159,7 @@
     renderGrid();
     renderKeyboard();
     await renderStats();
-    await renderLeaderboard();
+    await Promise.all([renderLeaderboard(), renderMedalTally()]);
     if(finished){
       endPanel.style.display = 'block';
       endTitle.textContent = won ? 'Nice catch!' : 'So close!';
