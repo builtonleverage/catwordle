@@ -33,8 +33,11 @@ REST API (PostgREST) — no custom backend code:
   guesses, and whether the reveal banner's been dismissed.
 - `results` — the shared leaderboard, one row per (round, player name).
   Intentionally *not* device-scoped, so everyone in a round sees everyone
-  else's result. Queried with `order=won.desc,guesses.asc` so sorting
-  happens in Postgres, not client-side.
+  else's result. `solve_ms` (see `supabase/005_solve_time.sql`) is each
+  player's own elapsed time from their first guess to their winning
+  guess, used to break ties fairly — the old behavior (breaking ties by
+  absolute finish timestamp) favored whoever opened the app earliest in
+  the round, not whoever actually solved it fastest once they engaged.
 - `device_log` — passive browser/device info (user agent, screen size,
   language, timezone, etc.) upserted on each visit — no permission
   prompts, just standard `navigator`/`screen` properties.
