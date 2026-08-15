@@ -258,7 +258,7 @@
   </div>
   <div id="playerChip" class="player-chip" style="display:none;"></div>
 
-  <div id="toast">Any 5-letter guess works</div>
+  <div id="toast">Guess a real 5-letter word</div>
   <div id="grid"></div>
   <div id="keyboard"></div>
 
@@ -308,7 +308,7 @@
 
     <div class="htp-step">
       <div class="htp-num">1</div>
-      <div class="htp-text">Guess the <b>5-letter word</b> in 6 tries. Any 5 letters count — no dictionary needed.</div>
+      <div class="htp-text">Guess the <b>5-letter word</b> in 6 tries. Guesses must be <b>real words</b>.</div>
     </div>
     <div class="htp-step">
       <div class="htp-num">2</div>
@@ -417,6 +417,16 @@
     SUPABASE_URL: '__CATWORDLE_SUPABASE_URL__',
     SUPABASE_ANON_KEY: '__CATWORDLE_SUPABASE_ANON_KEY__'
   };
+
+  // ---------- Valid-word dictionary ----------
+  // Loaded async so it never blocks initial render. If a guess is
+  // submitted before this finishes (slow network), fail open and allow
+  // it rather than blocking play - validation is a quality feature, not
+  // something that should be able to lock someone out of the game.
+  let VALID_WORDS = null;
+  fetch('assets/words.json').then(r => r.json()).then(list => {
+    VALID_WORDS = new Set(list);
+  }).catch(e => console.error('word list load failed', e));
 
   // ---------- Word bank ----------
   const BANK = [
@@ -747,6 +757,14 @@
   async function submitGuess(){
     if(currentGuess.length !== 5){
       showToast('Enter 5 letters', true);
+      shakeCurrentRow();
+      return;
+    }
+    // The answer itself is always accepted regardless of dictionary
+    // membership - a word-list gap (e.g. proper nouns like country/state
+    // names in BANK) must never make a round unwinnable.
+    if(VALID_WORDS && !VALID_WORDS.has(currentGuess) && currentGuess !== puzzle.word){
+      showToast('Not a valid word', true);
       shakeCurrentRow();
       return;
     }
