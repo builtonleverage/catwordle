@@ -738,9 +738,14 @@
   async function postResult(didWin){
     if(!playerName) return;
     try{
+      // ts is intentionally omitted here - the column defaults to now() on
+      // first insert, and since it's not in this payload, a later upsert
+      // (e.g. postResult gets called again if the player renames after
+      // finishing) leaves the original finish time untouched instead of
+      // bumping it to the rename time.
       await sbUpsert('results', {
         slot_index: slotIndex, name: playerName, guesses: guesses.length, won: didWin,
-        device_id: DEVICE_ID, ts: new Date().toISOString()
+        device_id: DEVICE_ID
       }, 'slot_index,name');
     }catch(e){ console.error('postResult failed', e); }
   }
@@ -749,18 +754,24 @@
     const board = $('leaderboard');
     let entries = [];
     try{
-      // One indexed, server-sorted query — no client-side sort needed.
+      // Fewest guesses still wins overall (the skill metric) - ts only
+      // breaks ties between equal guess counts and drives the "solved
+      // first" rank/time shown per winner. Server-sorted, no client sort.
       entries = await sbSelect('results', {
-        slot_index: `eq.${slotIndex}`, select: 'name,guesses,won', order: 'won.desc,guesses.asc'
+        slot_index: `eq.${slotIndex}`, select: 'name,guesses,won,ts', order: 'won.desc,guesses.asc,ts.asc'
       });
     }catch(e){ console.error('renderLeaderboard failed', e); }
     if(!entries || !entries.length){
       board.innerHTML = '<div class="lb-empty">No one yet — be the first!</div>';
       return;
     }
-    board.innerHTML = entries.map(e =>
-      `<div class="lb-row"><span>${escapeHtml(e.name)}</span><span>${e.won ? e.guesses + '/6' : '✕'}</span></div>`
-    ).join('');
+    let winRank = 0;
+    board.innerHTML = entries.map(e => {
+      if(!e.won) return `<div class="lb-row"><span>${escapeHtml(e.name)}</span><span>✕</span></div>`;
+      winRank++;
+      const time = e.ts ? new Date(e.ts).toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'}) : '';
+      return `<div class="lb-row"><span>#${winRank} ${escapeHtml(e.name)}</span><span>${e.guesses}/6${time ? ' · ' + time : ''}</span></div>`;
+    }).join('');
   }
 
   function escapeHtml(s){
