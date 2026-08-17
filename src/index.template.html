@@ -153,6 +153,19 @@
   }
   @media (prefers-reduced-motion: reduce){ .think-timer.hot{animation:none;} }
 
+  /* Hint unlock */
+  .hint-btn{
+    display:block; margin:0 auto 14px; background:var(--panel-2); color:var(--text);
+    border:1px solid var(--line); border-radius:100px; padding:8px 16px;
+    font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer;
+  }
+  .hint-btn:active{background:var(--panel);}
+  .hint-card{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:11px 14px; font-size:13px; color:var(--text); margin:0 auto 14px;
+    max-width:300px; text-align:center;
+  }
+
   /* Keyboard */
   #keyboard{max-width:400px; margin:0 auto 22px;}
   .krow{display:flex; justify-content:center; gap:5px; margin-bottom:6px;}
@@ -275,6 +288,8 @@
   <div id="toast">Guess a real 5-letter word</div>
   <div id="thinkTimer" class="think-timer" style="display:none;"></div>
   <div id="grid"></div>
+  <button id="hintBtn" class="hint-btn" style="display:none;">💡 Need a hint?</button>
+  <div id="hintCard" class="hint-card" style="display:none;"></div>
   <div id="keyboard"></div>
 
   <div id="endPanel" class="end-panel" style="display:none;">
@@ -449,19 +464,56 @@
 
   // ---------- Word bank ----------
   const BANK = [
-    ["FRUITS","MANGO"],["FRUITS","GRAPE"],["FRUITS","LEMON"],["FRUITS","MELON"],
-    ["VEGETABLES","ONION"],["SPICES & HERBS","THYME"],["SPICES & HERBS","CUMIN"],["SPICES & HERBS","BASIL"],
-    ["DOG BREEDS","BOXER"],["BIRDS","EAGLE"],["BIRDS","ROBIN"],["OCEAN CREATURES","WHALE"],
-    ["OCEAN CREATURES","SHARK"],["COLORS","BEIGE"],["COLORS","IVORY"],["CARD & TABLE GAMES","POKER"],
-    ["CHESS PIECES","QUEEN"],["MUSICAL INSTRUMENTS","BANJO"],["BODY PARTS","ELBOW"],["EMOTIONS","HAPPY"],
-    ["EMOTIONS","ANGRY"],["WEATHER","STORM"],["WEATHER","CLOUD"],["GEMSTONES","TOPAZ"],
-    ["GEMSTONES","PEARL"],["DANCE STYLES","SALSA"],["DANCE STYLES","TANGO"],["BREADS","BAGEL"],
-    ["COFFEE DRINKS","MOCHA"],["COUNTRIES","INDIA"],["COUNTRIES","CHINA"],["COUNTRIES","JAPAN"],
-    ["COUNTRIES","GHANA"],["US STATES","TEXAS"],["US STATES","IDAHO"],["US STATES","MAINE"],
-    ["ZODIAC SIGNS","LIBRA"],["ZODIAC SIGNS","VIRGO"],["GREEK GODS","HADES"],["ELEMENTS","XENON"],
-    ["ELEMENTS","RADON"],["ELEMENTS","BORON"],["MUSIC GENRES","METAL"],["MUSIC GENRES","HOUSE"],
-    ["DESSERTS","CANDY"],["TOOLS","DRILL"],["PLANETS","VENUS"],["PLANETS","EARTH"],
-    ["SPORTS","RUGBY"],["KITCHEN ITEMS","WHISK"]
+    ["FRUITS","MANGO","Tropical fruit with sweet orange flesh, often called the \"king of fruits\""],
+    ["FRUITS","GRAPE","Small fruit that grows in clusters and is fermented into wine"],
+    ["FRUITS","LEMON","Sour yellow citrus fruit used to add acidity to dishes"],
+    ["FRUITS","MELON","Large, juicy fruit with a thick rind, eaten in summer"],
+    ["VEGETABLES","ONION","Pungent bulb vegetable that brings people to tears when chopped"],
+    ["SPICES & HERBS","THYME","Fragrant herb often paired with roasted meats"],
+    ["SPICES & HERBS","CUMIN","Earthy spice essential to many curries and chilis"],
+    ["SPICES & HERBS","BASIL","Fragrant herb central to Italian pesto"],
+    ["DOG BREEDS","BOXER","Muscular dog breed known for its wrinkled brow and playful energy"],
+    ["BIRDS","EAGLE","Powerful bird of prey, a symbol of freedom and strength"],
+    ["BIRDS","ROBIN","Small bird with a distinctive red-orange breast"],
+    ["OCEAN CREATURES","WHALE","The largest animal ever known to have lived"],
+    ["OCEAN CREATURES","SHARK","Ocean predator with rows of replaceable teeth"],
+    ["COLORS","BEIGE","Neutral, pale sandy-brown color"],
+    ["COLORS","IVORY","Off-white color, also the material of elephant tusks"],
+    ["CARD & TABLE GAMES","POKER","Card game built around bluffing and betting"],
+    ["CHESS PIECES","QUEEN","The most powerful piece on a chessboard"],
+    ["MUSICAL INSTRUMENTS","BANJO","Stringed instrument with a drum-like body, common in bluegrass"],
+    ["BODY PARTS","ELBOW","Joint that bends the arm in the middle"],
+    ["EMOTIONS","HAPPY","Feeling of joy and contentment"],
+    ["EMOTIONS","ANGRY","Feeling of strong displeasure or hostility"],
+    ["WEATHER","STORM","Violent weather event with wind, rain, or thunder"],
+    ["WEATHER","CLOUD","Visible mass of water vapor floating in the sky"],
+    ["GEMSTONES","TOPAZ","Gemstone often found in warm golden or blue tones"],
+    ["GEMSTONES","PEARL","Gemstone formed inside an oyster"],
+    ["DANCE STYLES","SALSA","Fiery Latin dance with quick footwork"],
+    ["DANCE STYLES","TANGO","Passionate, dramatic ballroom dance from Argentina"],
+    ["BREADS","BAGEL","Dense, ring-shaped bread that's boiled before baking"],
+    ["COFFEE DRINKS","MOCHA","Coffee drink blended with chocolate"],
+    ["COUNTRIES","INDIA","South Asian country, the world's most populous"],
+    ["COUNTRIES","CHINA","East Asian country with the world's longest wall"],
+    ["COUNTRIES","JAPAN","East Asian island nation known for cherry blossoms"],
+    ["COUNTRIES","GHANA","West African country once known as the Gold Coast"],
+    ["US STATES","TEXAS","The second-largest US state, known for its independent spirit"],
+    ["US STATES","IDAHO","US state famous for growing potatoes"],
+    ["US STATES","MAINE","Northeastern US state famous for lobster and lighthouses"],
+    ["ZODIAC SIGNS","LIBRA","Zodiac sign symbolized by the scales"],
+    ["ZODIAC SIGNS","VIRGO","Zodiac sign symbolized by the maiden"],
+    ["GREEK GODS","HADES","Greek god who ruled the underworld"],
+    ["ELEMENTS","XENON","Rare noble gas used in some camera flashes and headlights"],
+    ["ELEMENTS","RADON","Radioactive noble gas that can seep into basements"],
+    ["ELEMENTS","BORON","Element used to strengthen glass and ceramics"],
+    ["MUSIC GENRES","METAL","Heavy, distortion-driven music genre"],
+    ["MUSIC GENRES","HOUSE","Electronic dance music genre with a steady four-on-the-floor beat"],
+    ["DESSERTS","CANDY","Sweet treat enjoyed in countless forms around the world"],
+    ["TOOLS","DRILL","Power tool used to bore holes or drive screws"],
+    ["PLANETS","VENUS","The hottest planet in our solar system"],
+    ["PLANETS","EARTH","The only known planet with life"],
+    ["SPORTS","RUGBY","Physical team sport played with an oval ball"],
+    ["KITCHEN ITEMS","WHISK","Kitchen tool with looped wires used to beat eggs or cream"]
   ];
 
   function mulberry32(seed){
@@ -483,7 +535,7 @@
   function slotIndexFor(ts){ return Math.floor((ts - EPOCH) / (12*3600*1000)); }
   function puzzleFor(slotIdx){
     const idx = perm[((slotIdx % perm.length) + perm.length) % perm.length];
-    return { category: BANK[idx][0], word: BANK[idx][1] };
+    return { category: BANK[idx][0], word: BANK[idx][1], hint: BANK[idx][2] };
   }
   function slotStart(slotIdx){ return new Date(EPOCH + slotIdx * 12*3600*1000); }
 
@@ -587,6 +639,12 @@
   const gridEl = $('grid'), keyboardEl = $('keyboard'), toastEl = $('toast');
   const endPanel = $('endPanel'), endTitle = $('endTitle'), endSub = $('endSub'), countdownEl = $('countdown');
   const thinkTimerEl = $('thinkTimer');
+  const hintBtn = $('hintBtn'), hintCardEl = $('hintCard');
+  hintBtn.addEventListener('click', () => {
+    hintCardEl.textContent = `💡 ${puzzle.hint}`;
+    hintCardEl.style.display = 'block';
+    hintBtn.style.display = 'none';
+  });
 
   $('dateLabel').textContent = slotStart(slotIndex).toLocaleDateString(undefined,{month:'short', day:'numeric'}) + ' · ' + (isAM ? 'AM Round' : 'PM Round');
   $('slotIcon').textContent = isAM ? '☀️' : '🌙';
@@ -656,6 +714,12 @@
   let playerName = null;
   let firstGuessAt = null; // ms epoch; timestamp of the first submitted guess, drives the solve-time tiebreak
   let solveMs = null; // computed once in finishGame() - postResult() must not recompute it from Date.now() on a later call (e.g. rename-after-finish), same reasoning as why ts is omitted there
+  // Hint unlocks once guesses.length crosses max(4, current bronze player's
+  // guess count) - recomputed whenever the round's leaderboard refetches
+  // (updateHintThreshold()), so it's only as fresh as the last fetch, same
+  // staleness tradeoff the leaderboard itself already has.
+  let hintThreshold = 4;
+  let hintUnlocked = false;
   const keyStatus = {};
 
   const ROWS = [
@@ -803,6 +867,7 @@
     currentGuess = '';
     renderGrid();
     renderKeyboard();
+    updateHintUnlock();
     await saveProgress();
     if(didWin){
       await finishGame(true);
@@ -1028,6 +1093,24 @@
       }
     }catch(e){ console.error('renderLeaderboard failed', e); leaderboardEntries = []; deviceCountByName = {}; }
     renderLeaderboardRows();
+    updateHintThreshold();
+  }
+
+  // Hint threshold = max(4, this round's live bronze-place guess count) -
+  // once a player is out of medal contention anyway, an optional hint
+  // needs no fairness penalty. Recomputed each time the leaderboard
+  // refetches (boot() and after finishGame()), so it can only be as fresh
+  // as the last fetch - same staleness the leaderboard display itself has.
+  function updateHintThreshold(){
+    const bronze = leaderboardEntries.filter(e => e.won).sort(turnsTiebreak)[2];
+    hintThreshold = Math.max(4, bronze ? bronze.guesses : 0);
+    updateHintUnlock();
+  }
+  function updateHintUnlock(){
+    if(!hintBtn) return;
+    if(finished || !puzzle.hint){ hintBtn.style.display = 'none'; return; }
+    if(guesses.length > hintThreshold) hintUnlocked = true;
+    hintBtn.style.display = hintUnlocked ? 'block' : 'none';
   }
 
   // Ties (equal guess count) break by solve duration, not absolute finish
@@ -1242,10 +1325,13 @@
     try{
       const rows = await sbSelect('round_puzzles', {
         slot_index: `in.(${slotIndex},${slotIndex - 1})`,
-        select: 'slot_index,category,word'
+        select: 'slot_index,category,word,hint'
       });
       for(const row of (rows || [])){
-        const override = { category: row.category, word: row.word };
+        // Fall back to the local BANK hint if an older override row
+        // predates the hint column (pre-migration 009).
+        const fallbackHint = row.slot_index === slotIndex ? puzzle.hint : prevPuzzle.hint;
+        const override = { category: row.category, word: row.word, hint: row.hint || fallbackHint };
         if(row.slot_index === slotIndex) puzzle = override;
         else if(row.slot_index === slotIndex - 1) prevPuzzle = override;
       }
