@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Catwordle — One Clue, One Word, Twice a Day</title>
 <meta name="description" content="A category-clued 5-letter word puzzle, twice a day. Get one hint word, guess the word in 6 tries, and compare results with friends.">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#0B0B0F">
 
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
 <link rel="icon" type="image/png" href="/assets/favicon.png">
@@ -24,16 +24,29 @@
 <meta name="twitter:image" content="https://catwordle.online/assets/og-image.png">
 <style>
   :root{
-    --bg:#000000;
-    --panel:#1C1C1E;
-    --panel-2:#2C2C2E;
-    --line: rgba(255,255,255,0.09);
-    --text:#F5F5F7;
-    --muted:#8E8E93;
-    --blue:#0A84FF;
+    /* Tonal surface scale (Material You-style dark tonal palette, not a
+       flat single black) */
+    --bg:#0B0B0F;
+    --panel:#18171D;
+    --panel-2:#211F27;
+    --panel-3:#2B2833;
+    --line: rgba(255,255,255,0.08);
+    --text:#F1EFF6;
+    --muted:#9A97A3;
+    --blue:#8C7CFF;
+    --blue-on:#1A1030;
     --green:#30D158;
     --yellow:#FFD60A;
     --absent:#3A3A3C;
+    /* Elevation - soft, low-opacity, no hard borders needed under these */
+    --shadow-1: 0 1px 2px rgba(0,0,0,.4), 0 1px 4px rgba(0,0,0,.25);
+    --shadow-2: 0 8px 24px rgba(0,0,0,.4), 0 2px 6px rgba(0,0,0,.3);
+    /* Rounded-corner scale, larger than before for a softer, more premium feel */
+    --radius-sm:10px;
+    --radius-md:16px;
+    --radius-lg:22px;
+    --radius-xl:28px;
+    --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   body{
@@ -44,7 +57,7 @@
     min-height:100vh;
     display:flex;
     justify-content:center;
-    padding:28px 16px 60px;
+    padding:28px 16px calc(60px + env(safe-area-inset-bottom));
     -webkit-font-smoothing:antialiased;
   }
   .wrap{width:100%; max-width:420px;}
@@ -59,14 +72,16 @@
     color:var(--text); font-size:14px; font-weight:600;
     display:flex; align-items:center; justify-content:center;
     cursor:pointer; flex-shrink:0;
+    transition:transform 0.12s var(--ease), background 0.15s var(--ease);
   }
-  .icon-btn:active{background:var(--panel-2);}
+  .icon-btn:active{background:var(--panel-2); transform:scale(0.92);}
 
   /* Category card */
   .card{
     background:var(--panel);
     border:1px solid var(--line);
-    border-radius:16px;
+    border-radius:var(--radius-lg);
+    box-shadow:var(--shadow-1);
     padding:16px 18px;
     display:flex;
     align-items:center;
@@ -86,7 +101,7 @@
   .reveal{
     background:var(--panel);
     border:1px solid var(--line);
-    border-radius:12px;
+    border-radius:var(--radius-md);
     padding:11px 14px;
     font-size:13px;
     color:var(--muted);
@@ -102,15 +117,16 @@
   /* Name setup */
   .name-setup{display:flex; gap:8px; margin-bottom:14px;}
   .name-setup input{
-    flex:1; background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    flex:1; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-sm);
     padding:11px 13px; color:var(--text); font-family:inherit; font-size:14px;
   }
   .name-setup input::placeholder{color:var(--muted);}
   .name-setup button, .primary-btn{
-    background:var(--blue); color:#fff; border:none; border-radius:10px;
+    background:var(--blue); color:var(--blue-on); border:none; border-radius:var(--radius-sm);
     padding:11px 18px; font-weight:600; font-size:14px; cursor:pointer; font-family:inherit;
+    transition:transform 0.12s var(--ease), filter 0.15s var(--ease);
   }
-  .name-setup button:active, .primary-btn:active{filter:brightness(0.9);}
+  .name-setup button:active, .primary-btn:active{filter:brightness(0.9); transform:scale(0.97);}
   .player-chip{text-align:center; font-size:12px; color:var(--muted); margin-bottom:14px;}
   .player-chip b{color:var(--text); font-weight:600;}
   .player-chip button{background:none; border:none; color:var(--blue); cursor:pointer; font-size:12px; padding:0; font-family:inherit;}
@@ -124,7 +140,7 @@
   .tile{
     aspect-ratio:1; display:flex; align-items:center; justify-content:center;
     font-weight:700; font-size:20px; letter-spacing:0;
-    border:1.5px solid var(--line); border-radius:8px;
+    border:1.5px solid var(--line); border-radius:var(--radius-sm);
     text-transform:uppercase; background:var(--panel); color:var(--text);
   }
   .tile.filled{border-color:rgba(255,255,255,0.35);}
@@ -137,46 +153,70 @@
     25%{transform:translateX(-5px);}
     75%{transform:translateX(5px);}
   }
-  @media (prefers-reduced-motion: reduce){ .row.shake{animation:none;} }
+  /* Reveal flip on submit - staggered per tile via inline animation-delay
+     set in JS (submitGuess()). Color classes are applied before the
+     animation starts, so the flip itself just reveals them. */
+  .row.reveal-anim .tile{animation:tile-flip 0.5s var(--ease) both;}
+  @keyframes tile-flip{
+    0%{transform:rotateX(0deg);}
+    50%{transform:rotateX(90deg);}
+    100%{transform:rotateX(0deg);}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .row.shake{animation:none;}
+    .row.reveal-anim .tile{animation:none;}
+  }
 
   /* Keyboard */
-  #keyboard{max-width:400px; margin:0 auto 22px;}
+  #keyboard{max-width:400px; margin:0 auto 22px; padding-bottom:env(safe-area-inset-bottom);}
   .krow{display:flex; justify-content:center; gap:5px; margin-bottom:6px;}
   .key{
-    background:var(--panel-2); color:var(--text); border:none; border-radius:6px;
+    background:var(--panel-2); color:var(--text); border:none; border-radius:var(--radius-sm);
     font-family:inherit; font-weight:600; font-size:12px;
     padding:13px 0; min-width:28px; flex:1; max-width:36px;
     cursor:pointer; text-transform:uppercase;
+    transition:transform 0.08s var(--ease), background 0.15s var(--ease);
   }
+  .key:active{transform:scale(0.92);}
   .key.wide{max-width:52px; font-size:11px;}
   .key.correct{background:var(--green); color:#04210E;}
   .key.present{background:var(--yellow); color:#3A2F00;}
   .key.absent{background:#2C2C2E; color:var(--muted);}
 
   /* End panel */
-  .end-panel{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px; text-align:center; margin-bottom:14px;}
+  .end-panel{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-lg); box-shadow:var(--shadow-1); padding:18px; text-align:center; margin-bottom:14px;}
   .end-title{font-size:19px; font-weight:600; margin-bottom:4px;}
   .end-sub{color:var(--muted); font-size:13px; margin-bottom:14px;}
   .countdown{font-size:12.5px; color:var(--muted); margin-top:10px;}
   .countdown b{color:var(--text); font-weight:600;}
 
   /* Panels */
-  .panel-block{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:12px;}
+  .panel-block{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius-lg); box-shadow:var(--shadow-1); padding:16px; margin-bottom:12px;}
   .panel-title{font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:12px; font-weight:600;}
   .panel-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;}
   .panel-head .panel-title{margin-bottom:0;}
   .panel-head-right{display:flex; align-items:center; gap:8px;}
-  .sort-toggle{display:flex; background:var(--panel-2); border-radius:8px; padding:2px; gap:2px;}
+  .sort-toggle{display:flex; background:var(--panel-2); border-radius:var(--radius-sm); padding:2px; gap:2px;}
   .sort-toggle button{
     background:none; border:none; color:var(--muted); font-family:inherit;
-    font-size:11px; font-weight:600; padding:5px 10px; border-radius:6px; cursor:pointer;
+    font-size:11px; font-weight:600; padding:5px 10px; border-radius:8px; cursor:pointer;
+    transition:background 0.15s var(--ease), color 0.15s var(--ease);
   }
-  .sort-toggle button.active{background:var(--blue); color:#fff;}
+  .sort-toggle button.active{background:var(--blue); color:var(--blue-on);}
   .lb-info-btn{width:22px; height:22px; font-size:12px; font-style:italic; font-family:Georgia,serif;}
   .stats-row{display:flex; justify-content:space-around; text-align:center;}
   .stat-num{font-size:21px; font-weight:700; color:var(--text);}
   .stat-label{font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.04em; margin-top:2px;}
-  .lb-row{display:flex; align-items:center; justify-content:space-between; font-size:13.5px; padding:7px 0; border-bottom:1px solid var(--line); gap:8px;}
+  .lb-row{
+    display:flex; align-items:center; justify-content:space-between; font-size:13.5px;
+    padding:7px 0; border-bottom:1px solid var(--line); gap:8px;
+    animation:lb-row-in 0.35s var(--ease) both;
+  }
+  @keyframes lb-row-in{
+    from{opacity:0; transform:translateY(4px);}
+    to{opacity:1; transform:translateY(0);}
+  }
+  @media (prefers-reduced-motion: reduce){ .lb-row{animation:none;} }
   .lb-left{display:flex; align-items:center; gap:6px; min-width:0;}
   .lb-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .lb-badge{flex-shrink:0; display:block;}
@@ -196,18 +236,28 @@
   .modal-backdrop{
     position:fixed; inset:0; background:rgba(0,0,0,0.6);
     backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
-    display:none; align-items:flex-end; justify-content:center; z-index:50;
+    display:flex; align-items:flex-end; justify-content:center; z-index:50;
+    opacity:0; visibility:hidden; pointer-events:none;
+    transition:opacity 0.22s var(--ease), visibility 0.22s;
   }
-  .modal-backdrop.open{display:flex;}
+  .modal-backdrop.open{opacity:1; visibility:visible; pointer-events:auto;}
   .modal{
     background:var(--panel); width:100%; max-width:420px;
-    border-radius:20px 20px 0 0; padding:22px 22px 32px;
+    border-radius:var(--radius-xl) var(--radius-xl) 0 0; padding:22px 22px calc(32px + env(safe-area-inset-bottom));
     max-height:82vh; overflow-y:auto;
     border:1px solid var(--line); border-bottom:none;
+    box-shadow:var(--shadow-2);
+    transform:translateY(24px);
+    transition:transform 0.25s var(--ease);
+  }
+  .modal-backdrop.open .modal{transform:translateY(0);}
+  @media (prefers-reduced-motion: reduce){
+    .modal-backdrop{transition:none;}
+    .modal{transition:none; transform:none;}
   }
   @media (min-width:480px){
     .modal-backdrop{align-items:center;}
-    .modal{border-radius:20px; border-bottom:1px solid var(--line); max-width:380px;}
+    .modal{border-radius:var(--radius-xl); border-bottom:1px solid var(--line); max-width:380px;}
   }
   .modal-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;}
   .modal-title{font-size:19px; font-weight:700;}
@@ -221,7 +271,7 @@
   .htp-text b{color:var(--text);}
   .htp-example{display:flex; gap:4px; margin:14px 0 6px;}
   .htp-tile{
-    width:34px; height:34px; border-radius:6px; display:flex; align-items:center; justify-content:center;
+    width:34px; height:34px; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center;
     font-weight:700; font-size:15px; text-transform:uppercase;
   }
   .htp-legend{font-size:12px; color:var(--muted); line-height:1.6; margin-top:6px;}
@@ -399,6 +449,14 @@
     <div class="htp-step">
       <div class="htp-num">ℹ️</div>
       <div class="htp-text">Tap the <b>i</b> next to the leaderboard any time for the full ranking rules.</div>
+    </div>
+    <div class="htp-step">
+      <div class="htp-num">⏱</div>
+      <div class="htp-text">A live timer now ticks from the moment you open the round — solved-in-first-guess still decides ties, but don't dawdle.</div>
+    </div>
+    <div class="htp-step">
+      <div class="htp-num">💡</div>
+      <div class="htp-text">Stuck past a few extra guesses? A <b>hint unlocks</b> once you're out of medal range.</div>
     </div>
 
     <button class="primary-btn" id="announceGotIt" style="width:100%; margin-top:6px;">Got it</button>
@@ -613,7 +671,7 @@
   // Shown once per device, whether they're brand new or a returning
   // player seeing this update for the first time. Bumping ANNOUNCE_KEY's
   // suffix is how a future announcement gets shown again to everyone.
-  const ANNOUNCE_KEY = 'cw_seen_announce_v2';
+  const ANNOUNCE_KEY = 'cw_seen_announce_v3';
   const announceBackdrop = $('announceBackdrop');
   function closeAnnounce(){
     announceBackdrop.classList.remove('open');
@@ -714,6 +772,21 @@
     }
   }
 
+  // Staggered flip animation on the just-submitted row (see .reveal-anim /
+  // @keyframes tile-flip). Purely cosmetic - removes the class afterward
+  // so it doesn't replay on unrelated re-renders (e.g. a later renderGrid()
+  // call only touches tile className, never the row's own class/style).
+  function animateRowReveal(rowIndex){
+    const row = document.getElementById('row-' + rowIndex);
+    if(!row) return;
+    const tiles = row.children;
+    for(let j = 0; j < tiles.length; j++){
+      tiles[j].style.animationDelay = (j * 80) + 'ms';
+    }
+    row.classList.add('reveal-anim');
+    setTimeout(() => { row.classList.remove('reveal-anim'); }, 500 + tiles.length * 80);
+  }
+
   function renderKeyboard(){
     document.querySelectorAll('.key').forEach(b => {
       const k = b.dataset.key;
@@ -773,6 +846,7 @@
       return;
     }
     const result = evaluate(currentGuess, puzzle.word);
+    const submittedRowIndex = guesses.length;
     guesses.push({ word: currentGuess, result });
     updateKeyStatus(currentGuess, result);
     const didWin = currentGuess === puzzle.word;
@@ -786,6 +860,7 @@
     currentGuess = '';
     renderGrid();
     renderKeyboard();
+    animateRowReveal(submittedRowIndex);
     await saveProgress();
     if(didWin){
       await finishGame(true);
@@ -1019,14 +1094,16 @@
       return new Date(a.ts) - new Date(b.ts);
     });
     let winRank = 0;
-    board.innerHTML = sorted.map(e => {
+    board.innerHTML = sorted.map((e, idx) => {
+      // Stagger-in delay, capped so a long list doesn't feel slow to settle.
+      const delay = Math.min(idx, 8) * 40;
       const medal = medalByName[e.name];
       const count = deviceCountByName[e.name] || 0;
       const deviceBadge = count > 1
         ? `<span class="lb-device-count" title="Played from ${count} devices">${deviceIconSvg}${count}</span>` : '';
       const badge = medal ? medalSvg(medal) : '';
       if(!e.won){
-        return `<div class="lb-row"><span class="lb-left">${badge}<span class="lb-name">${escapeHtml(e.name)}</span>${deviceBadge}</span><span>✕</span></div>`;
+        return `<div class="lb-row" style="animation-delay:${delay}ms"><span class="lb-left">${badge}<span class="lb-name">${escapeHtml(e.name)}</span>${deviceBadge}</span><span>✕</span></div>`;
       }
       winRank++;
       // Turns mode is ranked by solve duration, so show that instead of
@@ -1035,7 +1112,7 @@
       const detail = leaderboardSort === 'turns'
         ? (e.solve_ms != null ? formatDuration(e.solve_ms) : (e.ts ? new Date(e.ts).toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'}) : ''))
         : (e.ts ? new Date(e.ts).toLocaleTimeString(undefined, {hour:'numeric', minute:'2-digit'}) : '');
-      return `<div class="lb-row"><span class="lb-left">${badge}<span class="lb-name">#${winRank} ${escapeHtml(e.name)}</span>${deviceBadge}</span><span>${e.guesses}/6${detail ? ' · ' + detail : ''}</span></div>`;
+      return `<div class="lb-row" style="animation-delay:${delay}ms"><span class="lb-left">${badge}<span class="lb-name">#${winRank} ${escapeHtml(e.name)}</span>${deviceBadge}</span><span>${e.guesses}/6${detail ? ' · ' + detail : ''}</span></div>`;
     }).join('');
   }
 
