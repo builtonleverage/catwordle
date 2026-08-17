@@ -139,6 +139,20 @@
   }
   @media (prefers-reduced-motion: reduce){ .row.shake{animation:none;} }
 
+  /* Cosmetic pressure timer — nudges people to guess sooner, does not
+     affect solve_ms tiebreaking (see startThinkTimer() in JS). */
+  .think-timer{
+    text-align:center; font-size:12.5px; font-variant-numeric:tabular-nums;
+    color:var(--muted); margin:-4px 0 10px;
+  }
+  .think-timer.warm{color:var(--yellow);}
+  .think-timer.hot{color:#FF6B6B; animation:think-pulse 1.6s ease-in-out infinite;}
+  @keyframes think-pulse{
+    0%,100%{opacity:1;}
+    50%{opacity:0.55;}
+  }
+  @media (prefers-reduced-motion: reduce){ .think-timer.hot{animation:none;} }
+
   /* Keyboard */
   #keyboard{max-width:400px; margin:0 auto 22px;}
   .krow{display:flex; justify-content:center; gap:5px; margin-bottom:6px;}
@@ -259,6 +273,7 @@
   <div id="playerChip" class="player-chip" style="display:none;"></div>
 
   <div id="toast">Guess a real 5-letter word</div>
+  <div id="thinkTimer" class="think-timer" style="display:none;"></div>
   <div id="grid"></div>
   <div id="keyboard"></div>
 
@@ -473,6 +488,7 @@
   function slotStart(slotIdx){ return new Date(EPOCH + slotIdx * 12*3600*1000); }
 
   const now = Date.now();
+  const pageLoadAt = now;
   const slotIndex = slotIndexFor(now);
   const isAM = (((slotIndex % 2) + 2) % 2) === 0;
   // Local BANK-derived puzzle is the default/fallback. It may be overridden
@@ -570,6 +586,7 @@
   const $ = id => document.getElementById(id);
   const gridEl = $('grid'), keyboardEl = $('keyboard'), toastEl = $('toast');
   const endPanel = $('endPanel'), endTitle = $('endTitle'), endSub = $('endSub'), countdownEl = $('countdown');
+  const thinkTimerEl = $('thinkTimer');
 
   $('dateLabel').textContent = slotStart(slotIndex).toLocaleDateString(undefined,{month:'short', day:'numeric'}) + ' · ' + (isAM ? 'AM Round' : 'PM Round');
   $('slotIcon').textContent = isAM ? '☀️' : '🌙';
@@ -802,6 +819,7 @@
     finished = true;
     won = didWin;
     if(didWin && firstGuessAt) solveMs = Date.now() - firstGuessAt;
+    stopThinkTimer();
     endPanel.style.display = 'block';
     endTitle.textContent = didWin ? 'Nice catch!' : 'So close!';
     endSub.textContent = didWin
@@ -813,6 +831,31 @@
     await postResult(didWin);
     await renderStats();
     await renderLeaderboard();
+  }
+
+  // Purely cosmetic pressure timer — ticks from page load to nudge people
+  // into guessing sooner. Does NOT affect solve_ms/tiebreaking, which still
+  // starts on the first submitted guess (see firstGuessAt) — starting the
+  // real tiebreak clock at page load would unfairly penalize whoever opens
+  // the app earliest, same bug the solve-time fix already solved once.
+  let thinkTimerInterval = null;
+  function startThinkTimer(){
+    if(!thinkTimerEl) return;
+    thinkTimerEl.style.display = 'block';
+    function tick(){
+      const elapsed = Date.now() - pageLoadAt;
+      const m = Math.floor(elapsed / 60000);
+      const s = Math.floor((elapsed % 60000) / 1000);
+      thinkTimerEl.textContent = `⏱ ${m}:${String(s).padStart(2,'0')}`;
+      thinkTimerEl.classList.toggle('warm', elapsed >= 60000 && elapsed < 180000);
+      thinkTimerEl.classList.toggle('hot', elapsed >= 180000);
+    }
+    tick();
+    thinkTimerInterval = setInterval(tick, 1000);
+  }
+  function stopThinkTimer(){
+    if(thinkTimerInterval){ clearInterval(thinkTimerInterval); thinkTimerInterval = null; }
+    if(thinkTimerEl) thinkTimerEl.style.display = 'none';
   }
 
   function startCountdown(){
@@ -1228,6 +1271,8 @@
       endTitle.textContent = won ? 'Nice catch!' : 'So close!';
       endSub.textContent = won ? `Solved in ${guesses.length}/6 — ${puzzle.word}` : `The word was ${puzzle.word}`;
       startCountdown();
+    } else {
+      startThinkTimer();
     }
     maybeShowAnnounce();
   }
