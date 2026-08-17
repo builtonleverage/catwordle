@@ -39,7 +39,12 @@ REST API (PostgREST) — no custom backend code:
 - `devices` — per-browser name + running stats (played/wins/streak), keyed
   by a random `device_id` generated into `localStorage` on first visit.
 - `device_rounds` — per-device, per-round state: in-progress/finished
-  guesses, and whether the reveal banner's been dismissed.
+  guesses, and whether the reveal banner's been dismissed. The app only
+  ever reads the current (and sometimes previous) round's row, so this is
+  the one table that would otherwise grow unbounded (devices × rounds,
+  forever) — a `pg_cron` job (see `supabase/007_cleanup_old_device_rounds.sql`)
+  purges anything older than that automatically, every 12 hours, entirely
+  inside Postgres. No external scheduler, nothing to remember to run.
 - `results` — the shared leaderboard, one row per (round, player name).
   Intentionally *not* device-scoped, so everyone in a round sees everyone
   else's result. `solve_ms` (see `supabase/005_solve_time.sql`) is each
