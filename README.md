@@ -39,7 +39,12 @@ REST API (PostgREST) — no custom backend code:
 - `devices` — per-browser name + running stats (played/wins/streak), keyed
   by a random `device_id` generated into `localStorage` on first visit.
 - `device_rounds` — per-device, per-round state: in-progress/finished
-  guesses, and whether the reveal banner's been dismissed.
+  guesses, and whether the reveal banner's been dismissed. The app only
+  ever reads the current (and sometimes previous) round's row, so this is
+  the one table that would otherwise grow unbounded (devices × rounds,
+  forever) — a `pg_cron` job (see `supabase/007_cleanup_old_device_rounds.sql`)
+  purges anything older than that automatically, every 12 hours, entirely
+  inside Postgres. No external scheduler, nothing to remember to run.
 - `results` — the shared leaderboard, one row per (round, player name).
   Intentionally *not* device-scoped, so everyone in a round sees everyone
   else's result. `solve_ms` (see `supabase/005_solve_time.sql`) is each
@@ -50,10 +55,22 @@ REST API (PostgREST) — no custom backend code:
 - `device_log` — passive browser/device info (user agent, screen size,
   language, timezone, etc.) upserted on each visit — no permission
   prompts, just standard `navigator`/`screen` properties.
-- `round_puzzles` — auto-generated puzzle overrides, keyed by `slot_index`.
-  Publicly readable, but only writable with the `service_role` key (not the
-  public anon key) since it controls the actual game content shown to
-  every visitor — a scheduled job holds that key, the frontend never does.
+- `round_puzzles` — puzzle overrides, keyed by `slot_index`. Publicly
+  readable, but only writable with the `service_role` key (not the public
+  anon key) since it controls the actual game content shown to every
+  visitor.
+- `word_bank` — a large, category-diverse pool of (category, word) pairs
+  (see `supabase/008_word_bank.sql`), locked down with RLS and no public
+  policies — it's never read by the client, only by the refresh job below.
+  A `pg_cron` job (`refresh_round_puzzles()`) tops up the next ~30 days of
+  `round_puzzles` from this pool on the 1st of every month, avoiding
+  repeats where the pool allows it. Entirely inside Postgres — no external
+  generation service, no API costs, nothing to remember to run. An earlier
+  attempt to generate content via a scheduled Claude Code cloud routine
+  hit a hard wall (its sandbox couldn't reach Supabase at all — egress
+  restrictions), which is exactly the class of failure this design avoids
+  by living inside the database itself, same as the `device_rounds`
+  cleanup job above.
 
 `medal_tally` (a view, not a table — see `supabase/004_medal_tally.sql`)
 computes all-time gold/silver/bronze medal counts per player live from
