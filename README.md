@@ -72,6 +72,13 @@ REST API (PostgREST) — no custom backend code:
   by living inside the database itself, same as the `device_rounds`
   cleanup job above.
 
+  Both `word_bank` and `round_puzzles` also carry a `hint` column (see
+  `supabase/009_word_bank_hints.sql`) — a short, one-line, letter-free clue
+  per word, authored once per pool entry. The frontend unlocks a hint once
+  a player's guess count exceeds `max(4, this round's live bronze-place
+  guess count)` — by then they're already out of medal contention, so no
+  fairness penalty is needed.
+
 `medal_tally` (a view, not a table — see `supabase/004_medal_tally.sql`)
 computes all-time gold/silver/bronze medal counts per player live from
 `results`, using the same ranking rule as the per-round badges (fewest
