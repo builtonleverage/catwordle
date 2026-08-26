@@ -1291,7 +1291,7 @@
     const emojiMap = { correct:'🟩', present:'🟨', absent:'⬛' };
     const grid = guesses.map(g => g.result.map(r => emojiMap[r]).join('')).join('\n');
     const label = slotStart(slotIndex).toLocaleDateString(undefined,{month:'short', day:'numeric'});
-    const text = `Catwordle ${label} ${isAM ? 'AM' : 'PM'} · ${won ? guesses.length + '/6' : 'X/6'}\nCategory: ${puzzle.category}\n${grid}`;
+    const text = `Catwordle ${label} ${isAM ? 'AM' : 'PM'} · ${won ? guesses.length + '/6' : 'X/6'}\nCategory: ${puzzle.category}\n${grid}\nhttps://catwordle.online?utm_source=share`;
 
     if(navigator.share){
       try{ await navigator.share({ text }); return; }
