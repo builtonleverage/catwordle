@@ -135,7 +135,18 @@
   #toast.err{color:#FF453A;}
 
   /* Grid */
-  #grid{display:grid; grid-template-rows:repeat(6,1fr); gap:6px; margin:0 auto 16px; max-width:300px;}
+  #gridWrap{position:relative; max-width:300px; margin:0 auto 16px;}
+  #grid{display:grid; grid-template-rows:repeat(6,1fr); gap:6px;}
+  /* Transparent tap-catcher layered exactly over the grid so tapping it
+     focuses a real input (bringing up the phone's native keyboard) via a
+     direct user gesture on the input itself - proxying focus() from a
+     separate element is unreliable on iOS Safari. The on-screen keyboard
+     below keeps working independently either way; both stay live. */
+  .hidden-key-input{
+    position:absolute; inset:0; width:100%; height:100%;
+    opacity:0; border:none; outline:none; background:transparent; color:transparent;
+    caret-color:transparent; font-size:16px; padding:0; margin:0; cursor:default;
+  }
   .row{display:grid; grid-template-columns:repeat(5,1fr); gap:6px;}
   .tile{
     aspect-ratio:1; display:flex; align-items:center; justify-content:center;
@@ -337,7 +348,12 @@
 
   <div id="toast">Guess a real 5-letter word</div>
   <div id="thinkTimer" class="think-timer" style="display:none;"></div>
-  <div id="grid"></div>
+  <div id="gridWrap">
+    <div id="grid"></div>
+    <input id="hiddenKeyInput" class="hidden-key-input" type="text" inputmode="text"
+      autocapitalize="characters" autocorrect="off" autocomplete="off" spellcheck="false"
+      enterkeyhint="done" aria-label="Type your guess">
+  </div>
   <button id="hintBtn" class="hint-btn" style="display:none;">💡 Need a hint?</button>
   <div id="hintCard" class="hint-card" style="display:none;"></div>
   <div id="keyboard"></div>
@@ -696,6 +712,7 @@
   const $ = id => document.getElementById(id);
   const gridEl = $('grid'), keyboardEl = $('keyboard'), toastEl = $('toast');
   const endPanel = $('endPanel'), endTitle = $('endTitle'), endSub = $('endSub'), countdownEl = $('countdown');
+  const hiddenKeyInput = $('hiddenKeyInput');
   const thinkTimerEl = $('thinkTimer');
   const hintBtn = $('hintBtn'), hintCardEl = $('hintCard');
   hintBtn.addEventListener('click', () => {
@@ -955,9 +972,18 @@
     }
   }
 
+  // Stops the hidden input from intercepting taps (and popping the
+  // keyboard back up) once there's nothing left to type.
+  function updateHiddenInputState(){
+    if(!hiddenKeyInput) return;
+    hiddenKeyInput.style.pointerEvents = finished ? 'none' : 'auto';
+    if(finished) hiddenKeyInput.blur();
+  }
+
   async function finishGame(didWin){
     finished = true;
     won = didWin;
+    updateHiddenInputState();
     if(didWin && firstGuessAt) solveMs = Date.now() - firstGuessAt;
     stopThinkTimer();
     endPanel.style.display = 'block';
@@ -1392,6 +1418,34 @@
     else if(/^[a-zA-Z]$/.test(e.key)) handleKey(e.key.toUpperCase());
   });
 
+  // ---------- Native mobile keyboard ----------
+  // A tap on the grid focuses this hidden input, bringing up the phone's
+  // own keyboard - the on-screen keyboard below keeps working exactly as
+  // before either way, so both input methods stay live simultaneously.
+  // beforeinput (not keydown) is the reliable cross-platform primitive for
+  // virtual/IME keyboards - iOS/Android don't consistently fire keydown
+  // with a proper e.key for on-screen taps, but they do fire beforeinput
+  // with inputType/data. Enter is handled separately via keydown since it
+  // doesn't go through beforeinput on a single-line input.
+  if(hiddenKeyInput){
+    hiddenKeyInput.addEventListener('beforeinput', (e) => {
+      if(finished) return;
+      if(e.inputType === 'deleteContentBackward'){
+        e.preventDefault();
+        handleKey('BACK');
+      } else if(e.data){
+        e.preventDefault();
+        for(const ch of e.data.toUpperCase().replace(/[^A-Z]/g, '')) handleKey(ch);
+      }
+    });
+    hiddenKeyInput.addEventListener('keydown', (e) => {
+      if(e.key === 'Enter'){ e.preventDefault(); handleKey('ENTER'); }
+    });
+    // Safety net in case preventDefault() didn't stop the browser from
+    // inserting text anyway (composition/predictive-text edge cases).
+    hiddenKeyInput.addEventListener('input', () => { hiddenKeyInput.value = ''; });
+  }
+
   // ---------- Puzzle content override ----------
   // round_puzzles holds auto-generated content that overrides the local
   // BANK fallback for specific rounds. Only a scheduled job writes it
@@ -1429,6 +1483,7 @@
     renderKeyboard();
     await renderStats();
     await Promise.all([renderLeaderboard(), renderMedalTally()]);
+    updateHiddenInputState();
     if(finished){
       endPanel.style.display = 'block';
       endTitle.textContent = won ? 'Nice catch!' : 'So close!';
