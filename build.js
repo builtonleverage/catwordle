@@ -57,4 +57,13 @@ if (fs.existsSync(assetsSrc)) {
   }
 }
 
+// Copy static top-level files (robots.txt, sitemap.xml, ...) into the dist
+// root as-is - these are crawled directly at /robots.txt etc, not under /assets.
+const publicSrc = path.join(__dirname, 'public');
+if (fs.existsSync(publicSrc)) {
+  for (const file of fs.readdirSync(publicSrc)) {
+    fs.copyFileSync(path.join(publicSrc, file), path.join(outDir, file));
+  }
+}
+
 console.log('Built ' + outPath);
