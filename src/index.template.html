@@ -22,6 +22,20 @@
 <meta name="twitter:title" content="Catwordle — One Clue, One Word, Twice a Day">
 <meta name="twitter:description" content="A category-clued 5-letter word puzzle, twice a day. Get one hint word, guess the word in 6 tries, and compare results with friends.">
 <meta name="twitter:image" content="https://catwordle.online/assets/og-image.png">
+<link rel="canonical" href="https://catwordle.online/">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Game",
+  "name": "Catwordle",
+  "description": "A category-clued 5-letter word puzzle, twice a day. Get one hint word, guess the word in 6 tries, and compare results with friends.",
+  "url": "https://catwordle.online/",
+  "genre": "Word Game",
+  "isAccessibleForFree": true,
+  "applicationCategory": "Game",
+  "operatingSystem": "Any (web browser)"
+}
+</script>
 <style>
   :root{
     --bg:#000000;
@@ -190,6 +204,9 @@
   /* Panels */
   .panel-block{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:12px;}
   .panel-title{font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:12px; font-weight:600;}
+  .league-row{display:flex; align-items:center; gap:10px; margin:-4px 0 12px; font-size:12.5px; color:var(--muted);}
+  .league-row .league-name{font-weight:600; color:var(--text); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .league-link-btn{background:none; border:none; color:var(--blue); font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer; padding:0;}
   .panel-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;}
   .panel-head .panel-title{margin-bottom:0;}
   .panel-head-right{display:flex; align-items:center; gap:8px;}
@@ -319,6 +336,11 @@
         </div>
         <button class="icon-btn lb-info-btn" id="lbRulesBtn" aria-label="Ranking rules">i</button>
       </div>
+    </div>
+    <div class="league-row">
+      <span class="league-name" id="leagueLabel">Everyone</span>
+      <button type="button" class="league-link-btn" id="leagueInviteBtn">Invite friends</button>
+      <button type="button" class="league-link-btn" id="leagueLeaveBtn" style="display:none;">Show everyone</button>
     </div>
     <div id="leaderboard"><div class="lb-empty">No one yet — be the first!</div></div>
   </div>
@@ -570,6 +592,66 @@
   }
   const DEVICE_ID = getDeviceId();
 
+  // ---------- Leagues (private leaderboard groups) ----------
+  // A league is just a device_id <-> code membership row (league_members
+  // table) - it doesn't change how results are recorded, only which rows
+  // the leaderboard shows. Joining via ?league=CODE persists the code to
+  // localStorage so it keeps applying on later visits, then the param is
+  // stripped from the URL so it doesn't get re-shared/bookmarked oddly.
+  function genLeagueCode(){
+    return Math.random().toString(36).slice(2, 8).toUpperCase();
+  }
+  let activeLeague = null;
+  try{ activeLeague = localStorage.getItem('cw_league') || null; }catch(e){}
+  const urlLeague = new URLSearchParams(location.search).get('league');
+  let pendingLeagueJoin = null;
+  if(urlLeague && /^[A-Z0-9]{4,12}$/i.test(urlLeague)){
+    const code = urlLeague.toUpperCase();
+    pendingLeagueJoin = code;
+    activeLeague = code;
+    try{ localStorage.setItem('cw_league', code); }catch(e){}
+    const url = new URL(location.href);
+    url.searchParams.delete('league');
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
+  }
+  async function ensureLeagueMembership(){
+    if(!pendingLeagueJoin) return;
+    try{ await sbUpsert('league_members', { device_id: DEVICE_ID, league_code: pendingLeagueJoin }, 'device_id,league_code'); }
+    catch(e){ console.error('league join failed', e); }
+    pendingLeagueJoin = null;
+  }
+  function leaveLeague(){
+    activeLeague = null;
+    try{ localStorage.removeItem('cw_league'); }catch(e){}
+    renderLeagueRow();
+    renderLeaderboard();
+  }
+  function renderLeagueRow(){
+    $('leagueLabel').textContent = activeLeague ? `🔒 League ${activeLeague}` : 'Everyone';
+    $('leagueLeaveBtn').style.display = activeLeague ? 'inline' : 'none';
+  }
+  async function inviteToLeague(){
+    if(!activeLeague){
+      activeLeague = genLeagueCode();
+      try{ localStorage.setItem('cw_league', activeLeague); }catch(e){}
+      try{ await sbUpsert('league_members', { device_id: DEVICE_ID, league_code: activeLeague }, 'device_id,league_code'); }
+      catch(e){ console.error('league create failed', e); }
+      renderLeagueRow();
+      renderLeaderboard();
+    }
+    const url = `${location.origin}${location.pathname}?league=${activeLeague}`;
+    const text = `Join my Catwordle league: ${url}`;
+    if(navigator.share){
+      try{ await navigator.share({ text, url }); return; }
+      catch(e){ if(e && e.name === 'AbortError') return; }
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      try{ await navigator.clipboard.writeText(url); showToast('Invite link copied — send it to your group chat!'); return; }
+      catch(e){}
+    }
+    if(legacyCopy(url)){ showToast('Invite link copied — send it to your group chat!'); return; }
+    showToast(url);
+  }
   // ---------- Passive device stats (no permission prompts) ----------
   function collectDeviceInfo(){
     let tz = '';
@@ -645,6 +727,10 @@
     hintCardEl.style.display = 'block';
     hintBtn.style.display = 'none';
   });
+
+  $('leagueInviteBtn').addEventListener('click', inviteToLeague);
+  $('leagueLeaveBtn').addEventListener('click', leaveLeague);
+  renderLeagueRow();
 
   $('dateLabel').textContent = slotStart(slotIndex).toLocaleDateString(undefined,{month:'short', day:'numeric'}) + ' · ' + (isAM ? 'AM Round' : 'PM Round');
   $('slotIcon').textContent = isAM ? '☀️' : '🌙';
@@ -1082,11 +1168,17 @@
 
   async function renderLeaderboard(){
     try{
-      const [results, deviceNames] = await Promise.all([
-        sbSelect('results', { slot_index: `eq.${slotIndex}`, select: 'name,guesses,won,ts,solve_ms' }),
-        sbSelect('devices', { select: 'name', name: 'not.is.null' })
+      await ensureLeagueMembership();
+      const [results, deviceNames, members] = await Promise.all([
+        sbSelect('results', { slot_index: `eq.${slotIndex}`, select: 'name,guesses,won,ts,solve_ms,device_id' }),
+        sbSelect('devices', { select: 'name', name: 'not.is.null' }),
+        activeLeague ? sbSelect('league_members', { league_code: `eq.${activeLeague}`, select: 'device_id' }) : Promise.resolve(null)
       ]);
       leaderboardEntries = results || [];
+      if(members){
+        const memberIds = new Set(members.map(m => m.device_id));
+        leaderboardEntries = leaderboardEntries.filter(e => memberIds.has(e.device_id));
+      }
       deviceCountByName = {};
       for(const d of (deviceNames || [])){
         deviceCountByName[d.name] = (deviceCountByName[d.name] || 0) + 1;

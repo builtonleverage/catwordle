@@ -79,6 +79,13 @@ REST API (PostgREST) — no custom backend code:
   guess count)` — by then they're already out of medal contention, so no
   fairness penalty is needed.
 
+- `league_members` (see `supabase/010_league_members.sql`) — private
+  leaderboard groups. Joining a league (via an `?league=CODE` invite link,
+  generated client-side and shared through the existing share/clipboard
+  flow) just adds a `device_id`/`league_code` row; it doesn't change how
+  results are recorded, only which rows of the same round's `results` the
+  leaderboard filters down to on that device.
+
 `medal_tally` (a view, not a table — see `supabase/004_medal_tally.sql`)
 computes all-time gold/silver/bronze medal counts per player live from
 `results`, using the same ranking rule as the per-round badges (fewest
