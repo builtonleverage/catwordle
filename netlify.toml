@@ -6,6 +6,6 @@
   NODE_VERSION = "20"
 
 # Deploy Previews (PRs) and branch deploys use the same build command and
-# publish dir automatically. Make sure CATWORDLE_API_URL and
-# CATWORDLE_API_TOKEN are set for "All deploy contexts" in Site settings ->
+# publish dir automatically. Make sure CATWORDLE_SUPABASE_URL and
+# CATWORDLE_SUPABASE_ANON_KEY are set for "All deploy contexts" in Site settings ->
 # Environment variables, not just Production, or preview builds will fail.

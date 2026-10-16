@@ -762,10 +762,15 @@
   }
 
   // ---------- Storage helpers (Supabase REST / PostgREST) ----------
+  // x-device-id is this device's credential: RLS only lets a request
+  // read/write per-device rows whose device_id matches it (see
+  // supabase/011_lock_down_public_access.sql), so it's never shown to or
+  // fetched for anyone else.
   const SB_HEADERS = {
     apikey: CONFIG.SUPABASE_ANON_KEY,
     Authorization: `Bearer ${CONFIG.SUPABASE_ANON_KEY}`,
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
+    'x-device-id': DEVICE_ID
   };
   async function sbSelect(table, params){
     const url = new URL(`${CONFIG.SUPABASE_URL}/rest/v1/${table}`);
@@ -788,6 +793,13 @@
     });
     if(!res.ok) throw new Error('Supabase HTTP ' + res.status);
     return true;
+  }
+  async function sbRpc(fn, args){
+    const res = await fetch(`${CONFIG.SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+      method: 'POST', headers: SB_HEADERS, body: JSON.stringify(args)
+    });
+    if(!res.ok) throw new Error('Supabase HTTP ' + res.status);
+    return res.json();
   }
 
   // ---------- DOM refs ----------
@@ -1270,19 +1282,18 @@
   async function renderLeaderboard(){
     try{
       await ensureLeagueMembership();
-      const [results, deviceNames, members] = await Promise.all([
-        sbSelect('results', { slot_index: `eq.${slotIndex}`, select: 'name,guesses,won,ts,solve_ms,device_id' }),
-        sbSelect('devices', { select: 'name', name: 'not.is.null' }),
-        activeLeague ? sbSelect('league_members', { league_code: `eq.${activeLeague}`, select: 'device_id' }) : Promise.resolve(null)
+      // Neither read path returns device_ids - a league's board comes from
+      // league_results(), which needs the league code to return anything.
+      const [results, nameCounts] = await Promise.all([
+        activeLeague
+          ? sbRpc('league_results', { p_slot: slotIndex, p_code: activeLeague })
+          : sbSelect('public_results', { slot_index: `eq.${slotIndex}`, select: 'name,guesses,won,ts,solve_ms' }),
+        sbSelect('name_device_counts', { select: 'name,devices' })
       ]);
       leaderboardEntries = results || [];
-      if(members){
-        const memberIds = new Set(members.map(m => m.device_id));
-        leaderboardEntries = leaderboardEntries.filter(e => memberIds.has(e.device_id));
-      }
       deviceCountByName = {};
-      for(const d of (deviceNames || [])){
-        deviceCountByName[d.name] = (deviceCountByName[d.name] || 0) + 1;
+      for(const d of (nameCounts || [])){
+        deviceCountByName[d.name] = d.devices;
       }
     }catch(e){ console.error('renderLeaderboard failed', e); leaderboardEntries = []; deviceCountByName = {}; }
     renderLeaderboardRows();
@@ -1540,9 +1551,9 @@
 
   // ---------- Puzzle content override ----------
   // round_puzzles holds auto-generated content that overrides the local
-  // BANK fallback for specific rounds. Only a scheduled job writes it
-  // (service_role key, never the client), so there's no race to handle -
-  // this is a plain read. If the table's empty or unreachable, puzzle/
+  // BANK fallback for specific rounds. Only a pg_cron job writes it
+  // (never the client), and RLS only exposes current/past rounds, so
+  // there's no race to handle - this is a plain read. If the table's empty or unreachable, puzzle/
   // prevPuzzle just keep their BANK-derived defaults.
   async function resolvePuzzleOverrides(){
     try{
