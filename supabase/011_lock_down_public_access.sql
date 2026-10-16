@@ -20,6 +20,8 @@
 -- reads (leaderboard, device counts, league boards) go through views and
 -- a function that never return device_id.
 --
+-- Requires 010_league_members.sql to have been run first. Safe to re-run.
+--
 -- Rollout: run this in the SQL Editor, then deploy the matching frontend
 -- right away - the previous frontend doesn't send x-device-id, so its
 -- writes are rejected once this is applied (reads of the board fail
@@ -46,32 +48,44 @@ $$;
 drop policy if exists "public select devices" on devices;
 drop policy if exists "public insert devices" on devices;
 drop policy if exists "public update devices" on devices;
+drop policy if exists "own select devices" on devices;
 create policy "own select devices" on devices for select using (device_id = request_device_id());
+drop policy if exists "own insert devices" on devices;
 create policy "own insert devices" on devices for insert with check (device_id = request_device_id());
+drop policy if exists "own update devices" on devices;
 create policy "own update devices" on devices for update using (device_id = request_device_id()) with check (device_id = request_device_id());
 
 -- ---------- device_rounds ----------
 drop policy if exists "public select device_rounds" on device_rounds;
 drop policy if exists "public insert device_rounds" on device_rounds;
 drop policy if exists "public update device_rounds" on device_rounds;
+drop policy if exists "own select device_rounds" on device_rounds;
 create policy "own select device_rounds" on device_rounds for select using (device_id = request_device_id());
+drop policy if exists "own insert device_rounds" on device_rounds;
 create policy "own insert device_rounds" on device_rounds for insert with check (device_id = request_device_id());
+drop policy if exists "own update device_rounds" on device_rounds;
 create policy "own update device_rounds" on device_rounds for update using (device_id = request_device_id()) with check (device_id = request_device_id());
 
 -- ---------- results ----------
 drop policy if exists "public select results" on results;
 drop policy if exists "public insert results" on results;
 drop policy if exists "public update results" on results;
+drop policy if exists "own select results" on results;
 create policy "own select results" on results for select using (device_id = request_device_id());
+drop policy if exists "own insert results" on results;
 create policy "own insert results" on results for insert with check (device_id = request_device_id());
+drop policy if exists "own update results" on results;
 create policy "own update results" on results for update using (device_id = request_device_id()) with check (device_id = request_device_id());
 
 -- ---------- device_log ----------
 drop policy if exists "public select device_log" on device_log;
 drop policy if exists "public insert device_log" on device_log;
 drop policy if exists "public update device_log" on device_log;
+drop policy if exists "own select device_log" on device_log;
 create policy "own select device_log" on device_log for select using (device_id = request_device_id());
+drop policy if exists "own insert device_log" on device_log;
 create policy "own insert device_log" on device_log for insert with check (device_id = request_device_id());
+drop policy if exists "own update device_log" on device_log;
 create policy "own update device_log" on device_log for update using (device_id = request_device_id()) with check (device_id = request_device_id());
 
 -- ---------- league_members ----------
@@ -81,13 +95,17 @@ create policy "own update device_log" on device_log for update using (device_id 
 -- doesn't error on the existing row.
 drop policy if exists "public select league_members" on league_members;
 drop policy if exists "public insert league_members" on league_members;
+drop policy if exists "own select league_members" on league_members;
 create policy "own select league_members" on league_members for select using (device_id = request_device_id());
+drop policy if exists "own insert league_members" on league_members;
 create policy "own insert league_members" on league_members for insert with check (device_id = request_device_id());
+drop policy if exists "own update league_members" on league_members;
 create policy "own update league_members" on league_members for update using (device_id = request_device_id()) with check (device_id = request_device_id());
 
 -- ---------- round_puzzles ----------
 -- Current and past rounds only - future rows are upcoming answers.
 drop policy if exists "public select round_puzzles" on round_puzzles;
+drop policy if exists "past and current round_puzzles" on round_puzzles;
 create policy "past and current round_puzzles" on round_puzzles for select using (slot_index <= current_slot());
 
 -- ---------- Server-side sanity limits ----------
