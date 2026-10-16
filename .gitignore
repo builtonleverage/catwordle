@@ -8,3 +8,4 @@ dist/
 .vercel/
 .netlify/
 .claude/settings.local.json
+.claude/launch.json
