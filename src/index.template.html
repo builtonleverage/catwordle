@@ -1541,12 +1541,39 @@
         for(const ch of e.data.toUpperCase().replace(/[^A-Z]/g, '')) handleKey(ch);
       }
     });
+    // The window keydown handler skips focused inputs, so Backspace has to
+    // be handled here too. preventDefault() also suppresses the matching
+    // beforeinput, so this never double-deletes.
     hiddenKeyInput.addEventListener('keydown', (e) => {
       if(e.key === 'Enter'){ e.preventDefault(); handleKey('ENTER'); }
+      else if(e.key === 'Backspace'){ e.preventDefault(); handleKey('BACK'); }
     });
+    // Keep a sentinel character in the input: browsers don't fire
+    // beforeinput for Backspace on an empty field, and Android keyboards
+    // report keydown as "Unidentified", so without it the phone's
+    // backspace key does nothing at all.
+    const SENTINEL = ' ';
+    const resetHiddenInput = () => {
+      hiddenKeyInput.value = SENTINEL;
+      try{ hiddenKeyInput.setSelectionRange(1, 1); }catch(e){}
+    };
+    resetHiddenInput();
+    hiddenKeyInput.addEventListener('focus', resetHiddenInput);
     // Safety net in case preventDefault() didn't stop the browser from
-    // inserting text anyway (composition/predictive-text edge cases).
-    hiddenKeyInput.addEventListener('input', () => { hiddenKeyInput.value = ''; });
+    // editing the value anyway (composition/predictive-text edge cases).
+    hiddenKeyInput.addEventListener('input', resetHiddenInput);
+    // iOS's "Done" tick above the keyboard fires no key event - it only
+    // blurs the input. Treat a blur that wasn't caused by tapping
+    // elsewhere on the page (or leaving the app) as Enter.
+    let lastPointerDownAt = 0;
+    document.addEventListener('pointerdown', () => { lastPointerDownAt = Date.now(); }, true);
+    hiddenKeyInput.addEventListener('blur', () => {
+      if(Date.now() - lastPointerDownAt < 500) return;
+      setTimeout(() => {
+        if(document.hidden || !document.hasFocus()) return;
+        if(!finished && currentGuess.length === 5) handleKey('ENTER');
+      }, 50);
+    });
   }
 
   // ---------- Puzzle content override ----------
