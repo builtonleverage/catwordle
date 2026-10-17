@@ -1562,6 +1562,18 @@
     // Safety net in case preventDefault() didn't stop the browser from
     // editing the value anyway (composition/predictive-text edge cases).
     hiddenKeyInput.addEventListener('input', resetHiddenInput);
+    // iOS's "Done" tick above the keyboard fires no key event - it only
+    // blurs the input. Treat a blur that wasn't caused by tapping
+    // elsewhere on the page (or leaving the app) as Enter.
+    let lastPointerDownAt = 0;
+    document.addEventListener('pointerdown', () => { lastPointerDownAt = Date.now(); }, true);
+    hiddenKeyInput.addEventListener('blur', () => {
+      if(Date.now() - lastPointerDownAt < 500) return;
+      setTimeout(() => {
+        if(document.hidden || !document.hasFocus()) return;
+        if(!finished && currentGuess.length === 5) handleKey('ENTER');
+      }, 50);
+    });
   }
 
   // ---------- Puzzle content override ----------
