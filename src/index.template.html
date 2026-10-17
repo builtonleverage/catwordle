@@ -1541,12 +1541,27 @@
         for(const ch of e.data.toUpperCase().replace(/[^A-Z]/g, '')) handleKey(ch);
       }
     });
+    // The window keydown handler skips focused inputs, so Backspace has to
+    // be handled here too. preventDefault() also suppresses the matching
+    // beforeinput, so this never double-deletes.
     hiddenKeyInput.addEventListener('keydown', (e) => {
       if(e.key === 'Enter'){ e.preventDefault(); handleKey('ENTER'); }
+      else if(e.key === 'Backspace'){ e.preventDefault(); handleKey('BACK'); }
     });
+    // Keep a sentinel character in the input: browsers don't fire
+    // beforeinput for Backspace on an empty field, and Android keyboards
+    // report keydown as "Unidentified", so without it the phone's
+    // backspace key does nothing at all.
+    const SENTINEL = ' ';
+    const resetHiddenInput = () => {
+      hiddenKeyInput.value = SENTINEL;
+      try{ hiddenKeyInput.setSelectionRange(1, 1); }catch(e){}
+    };
+    resetHiddenInput();
+    hiddenKeyInput.addEventListener('focus', resetHiddenInput);
     // Safety net in case preventDefault() didn't stop the browser from
-    // inserting text anyway (composition/predictive-text edge cases).
-    hiddenKeyInput.addEventListener('input', () => { hiddenKeyInput.value = ''; });
+    // editing the value anyway (composition/predictive-text edge cases).
+    hiddenKeyInput.addEventListener('input', resetHiddenInput);
   }
 
   // ---------- Puzzle content override ----------
